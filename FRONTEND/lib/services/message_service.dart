@@ -8,13 +8,11 @@ class MessageService {
   Future<List<Message>> getChatMessages({required String sessionId}) async {
     try {
       final uri = Uri.parse(
-        '${AppConstants.medicalBotEndpoint}/chat-messages/$sessionId',
+        '${AppConstants.businessBotEndpoint}/chat-messages/$sessionId',
       );
 
       final headers = {'Content-Type': 'application/json'};
-      if (ApiService.authToken != null) {
-        headers['Authorization'] = 'Bearer ${ApiService.authToken}';
-      }
+      headers['Authorization'] = 'Bearer ${ApiService.authToken ?? 'demo123'}';
 
       final response = await http.get(uri, headers: headers);
 
@@ -41,13 +39,11 @@ class MessageService {
   }) async {
     try {
       final uri = Uri.parse(
-        '${AppConstants.medicalBotEndpoint}/chat/$sessionId?user_id=$userId',
+        '${AppConstants.businessBotEndpoint}/chat/$sessionId?user_id=$userId',
       );
 
       final headers = {'Content-Type': 'application/json'};
-      if (ApiService.authToken != null) {
-        headers['Authorization'] = 'Bearer ${ApiService.authToken}';
-      }
+      headers['Authorization'] = 'Bearer ${ApiService.authToken ?? 'demo123'}';
 
       final response = await http.post(
         uri,

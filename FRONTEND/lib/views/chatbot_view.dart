@@ -10,6 +10,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 import '../../config/constants.dart';
 import 'package:uuid/uuid.dart';
+import '../services/message_service.dart';
 
 class ChatbotView extends StatefulWidget {
   const ChatbotView({super.key});
@@ -23,6 +24,9 @@ class _ChatbotViewState extends State<ChatbotView> with TickerProviderStateMixin
   final ScrollController _scrollController = ScrollController();
   final List<_ChatMessage> _messages = [];
   bool _isTyping = false;
+  final MessageService _messageService = MessageService();
+  final String _sessionId = "1";
+  final String _userId = "1";
 
   final AudioPlayer _audioPlayer = AudioPlayer();
   final AudioRecorder _audioRecorder = AudioRecorder();
@@ -33,18 +37,41 @@ class _ChatbotViewState extends State<ChatbotView> with TickerProviderStateMixin
   @override
   void initState() {
     super.initState();
-    // Mensaje de bienvenida
-    Future.delayed(const Duration(milliseconds: 400), () {
-      _addBotMessage(
-        '¡Hola! 👋 Soy el asistente virtual de **JAMTECH**.\n\n'
-        'Puedo ayudarte con:\n'
-        '• Consultas sobre transacciones\n'
-        '• Soporte para cobros y pagos\n'
-        '• Información de tu cuenta\n'
-        '• Reportes y estadísticas\n\n'
-        '¿En qué puedo ayudarte hoy?',
-      );
-    });
+    _loadChatHistory();
+  }
+
+  Future<void> _loadChatHistory() async {
+    try {
+      final messages = await _messageService.getChatMessages(sessionId: _sessionId);
+      if (messages.isEmpty) {
+        if (mounted) {
+          Future.delayed(const Duration(milliseconds: 400), () {
+            _addBotMessage(
+              '¡Hola! 👋 Soy el asistente virtual de **JAMTECH**.\n\n'
+              'Puedo ayudarte con:\n'
+              '• Consultas sobre transacciones\n'
+              '• Soporte para cobros y pagos\n'
+              '• Información de tu cuenta\n'
+              '• Reportes y estadísticas\n\n'
+              '¿En qué puedo ayudarte hoy?',
+            );
+          });
+        }
+      } else {
+        if (mounted) {
+          setState(() {
+            for (var msg in messages) {
+              _messages.add(_ChatMessage(text: msg.content, isUser: msg.type == 'human'));
+            }
+          });
+          _scrollToBottom();
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        _addBotMessage("¡Hola! Soy el asistente virtual. ¿En qué puedo ayudarte?");
+      }
+    }
   }
 
   @override
@@ -92,22 +119,21 @@ class _ChatbotViewState extends State<ChatbotView> with TickerProviderStateMixin
     setState(() => _isTyping = true);
 
     try {
-      final response = await http.post(
-        Uri.parse('${AppConstants.businessBotEndpoint}/chat/$_sessionId?user_id=invitado@jamtech.com'),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({'message': text}),
+      final responseMsg = await _messageService.sendMessage(
+        userId: _userId,
+        sessionId: _sessionId,
+        message: text,
       );
 
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        _addBotMessage(data['bot_response']['content'] ?? 'Sin respuesta');
-      } else {
-        _addBotMessage('Error al conectar con el servidor.');
+      if (mounted) {
+        setState(() => _isTyping = false);
+        _addBotMessage(responseMsg.content);
       }
     } catch (e) {
-      _addBotMessage('Error de red al conectar al bot.');
-    } finally {
-      if (mounted) setState(() => _isTyping = false);
+      if (mounted) {
+        setState(() => _isTyping = false);
+        _addBotMessage("Hubo un error al procesar tu solicitud. Intenta nuevamente.");
+      }
     }
   }
 
