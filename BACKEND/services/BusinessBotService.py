@@ -236,3 +236,57 @@ class BusinessBotService:
             config={"configurable": {"session_id": session_id}},
         )
         return {"content": response["answer"]}
+
+    async def generate_tts_audio(self, text: str):
+        import requests
+        api_key = os.environ.get("ELEVENLABS_API_KEY")
+        if not api_key:
+            raise Exception("ELEVENLABS_API_KEY no configurado")
+        
+        voice_id = "21m00Tcm4TlvDq8ikWAM" # Rachel
+        url = f"https://api.elevenlabs.io/v1/text-to-speech/{voice_id}"
+        headers = {
+            "xi-api-key": api_key,
+            "Content-Type": "application/json"
+        }
+        data = {
+            "text": text,
+            "model_id": "eleven_multilingual_v2",
+            "voice_settings": {
+                "stability": 0.5,
+                "similarity_boost": 0.75
+            }
+        }
+        
+        import asyncio
+        loop = asyncio.get_event_loop()
+        def fetch():
+            return requests.post(url, headers=headers, json=data)
+        response = await loop.run_in_executor(None, fetch)
+        
+        if response.status_code != 200:
+            raise Exception(f"Error TTS: {response.text}")
+            
+        return response.content
+
+    async def transcribe_audio(self, audio_bytes: bytes, filename: str = "audio.wav"):
+        import requests
+        api_key = os.environ.get("ELEVENLABS_API_KEY")
+        if not api_key:
+            raise Exception("ELEVENLABS_API_KEY no configurado")
+            
+        url = "https://api.elevenlabs.io/v1/speech-to-text"
+        headers = {"xi-api-key": api_key}
+        data = {"model_id": "scribe_v1"}
+        files = {"file": (filename, audio_bytes, "audio/wav")}
+        
+        import asyncio
+        loop = asyncio.get_event_loop()
+        def fetch():
+            return requests.post(url, headers=headers, data=data, files=files)
+        response = await loop.run_in_executor(None, fetch)
+            
+        if response.status_code != 200:
+            raise Exception(f"Error STT: {response.text}")
+            
+        return response.json().get("text", "")

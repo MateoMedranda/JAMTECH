@@ -6,6 +6,7 @@ class AppConstants {
   /// URLs de los endpoints
   static const String usersEndpoint = '$baseUrl/api/users';
   static const String medicalBotEndpoint = '$baseUrl/medical-bot';
+  static const String businessBotEndpoint = '$baseUrl/business-bot';
   static const String imagePredictionEndpoint = '$baseUrl/image-prediction';
 
   /// Timeouts
