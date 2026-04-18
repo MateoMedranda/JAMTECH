@@ -1,0 +1,13 @@
+
+services:
+  backend:
+    build: .
+    container_name: healthfy-backend
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    volumes:
+      - ./chroma_db:/app/chroma_db  # Persistencia para la base de datos vectorial
+      - ./ChatbotData:/app/ChatbotData # Datos del chatbot
+    restart: always

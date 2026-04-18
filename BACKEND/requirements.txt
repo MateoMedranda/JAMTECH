@@ -1,0 +1,17 @@
+fastapi[standard]
+pydantic
+python-dotenv
+motor
+langchain-groq
+langchain-huggingface
+langchain-chroma
+langchain-community
+langchain-text-splitters
+langchain-classic
+langchain-core
+langchain-mongodb
+uvicorn
+sentence-transformers
+python-multipart
+python-jose[cryptography]
+passlib[bcrypt]
