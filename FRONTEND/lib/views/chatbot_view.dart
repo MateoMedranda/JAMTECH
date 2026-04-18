@@ -1,6 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../config/theme/app_colors.dart';
+import 'dart:convert';
+import 'dart:io';
+import 'package:http/http.dart' as http;
+import 'package:audioplayers/audioplayers.dart';
+import 'package:record/record.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:permission_handler/permission_handler.dart';
+import '../../config/constants.dart';
+import 'package:uuid/uuid.dart';
 import '../services/message_service.dart';
 
 class ChatbotView extends StatefulWidget {
@@ -18,6 +27,12 @@ class _ChatbotViewState extends State<ChatbotView> with TickerProviderStateMixin
   final MessageService _messageService = MessageService();
   final String _sessionId = "1";
   final String _userId = "1";
+
+  final AudioPlayer _audioPlayer = AudioPlayer();
+  final AudioRecorder _audioRecorder = AudioRecorder();
+  final String _sessionId = const Uuid().v4();
+  bool _isRecording = false;
+  String? _currentlyPlayingId;
 
   @override
   void initState() {
@@ -63,6 +78,8 @@ class _ChatbotViewState extends State<ChatbotView> with TickerProviderStateMixin
   void dispose() {
     _messageController.dispose();
     _scrollController.dispose();
+    _audioPlayer.dispose();
+    _audioRecorder.dispose();
     super.dispose();
   }
 
@@ -117,6 +134,83 @@ class _ChatbotViewState extends State<ChatbotView> with TickerProviderStateMixin
         setState(() => _isTyping = false);
         _addBotMessage("Hubo un error al procesar tu solicitud. Intenta nuevamente.");
       }
+    }
+  }
+
+  Future<void> _playAudio(String text, String messageId) async {
+    if (_currentlyPlayingId == messageId) {
+      await _audioPlayer.stop();
+      setState(() => _currentlyPlayingId = null);
+      return;
+    }
+    
+    setState(() => _currentlyPlayingId = messageId);
+    
+    try {
+      final response = await http.post(
+        Uri.parse('${AppConstants.businessBotEndpoint}/tts'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'text': text}),
+      );
+
+      if (response.statusCode == 200) {
+        final tempDir = await getTemporaryDirectory();
+        final file = File('${tempDir.path}/tts_$messageId.mp3');
+        await file.writeAsBytes(response.bodyBytes);
+        
+        await _audioPlayer.play(DeviceFileSource(file.path));
+        _audioPlayer.onPlayerComplete.listen((_) {
+          if (mounted) setState(() => _currentlyPlayingId = null);
+        });
+      } else {
+        setState(() => _currentlyPlayingId = null);
+      }
+    } catch (e) {
+      print('Error TTS: $e');
+      setState(() => _currentlyPlayingId = null);
+    }
+  }
+
+  Future<void> _toggleRecording() async {
+    if (_isRecording) {
+      final path = await _audioRecorder.stop();
+      setState(() => _isRecording = false);
+      if (path != null) {
+        _sendAudioForSTT(path);
+      }
+    } else {
+      if (await _audioRecorder.hasPermission()) {
+        final tempDir = await getTemporaryDirectory();
+        final path = '${tempDir.path}/audio_${DateTime.now().millisecondsSinceEpoch}.m4a';
+        await _audioRecorder.start(const RecordConfig(), path: path);
+        setState(() => _isRecording = true);
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Permiso de micrófono denegado.')),
+        );
+      }
+    }
+  }
+
+  Future<void> _sendAudioForSTT(String path) async {
+    setState(() => _isTyping = true); 
+    try {
+      var request = http.MultipartRequest('POST', Uri.parse('${AppConstants.businessBotEndpoint}/stt'));
+      request.files.add(await http.MultipartFile.fromPath('file', path));
+      var response = await request.send();
+      if (response.statusCode == 200) {
+        var responseData = await response.stream.bytesToString();
+        var data = jsonDecode(responseData);
+        String text = data['text'] ?? '';
+        if (text.isNotEmpty) {
+          _messageController.text = text;
+          _sendMessage();
+        }
+      }
+    } catch (e) {
+      print('Error STT: $e');
+    } finally {
+      if (mounted) setState(() => _isTyping = false);
     }
   }
 
@@ -338,6 +432,26 @@ class _ChatbotViewState extends State<ChatbotView> with TickerProviderStateMixin
               ),
             ),
           ),
+          if (!isUser) ...[
+            const SizedBox(width: 8),
+            GestureDetector(
+              onTap: () => _playAudio(message.text, message.id),
+              child: Container(
+                width: 32,
+                height: 32,
+                decoration: BoxDecoration(
+                  color: _currentlyPlayingId == message.id ? AppColors.primary : AppColors.primarySurface,
+                  shape: BoxShape.circle,
+                  border: Border.all(color: AppColors.primary.withOpacity(0.2)),
+                ),
+                child: Icon(
+                  _currentlyPlayingId == message.id ? Icons.stop_rounded : Icons.volume_up_rounded,
+                  color: _currentlyPlayingId == message.id ? Colors.white : AppColors.primary,
+                  size: 18,
+                ),
+              ),
+            ),
+          ],
           if (isUser) ...[
             const SizedBox(width: 8),
             Container(
@@ -494,6 +608,24 @@ class _ChatbotViewState extends State<ChatbotView> with TickerProviderStateMixin
             ),
           ),
           const SizedBox(width: 10),
+          // Botón Micrófono
+          GestureDetector(
+            onTap: _toggleRecording,
+            child: Container(
+              width: 48,
+              height: 48,
+              decoration: BoxDecoration(
+                color: _isRecording ? Colors.red : AppColors.primarySurface,
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                _isRecording ? Icons.stop_rounded : Icons.mic_rounded,
+                color: _isRecording ? Colors.white : AppColors.primary,
+                size: 20,
+              ),
+            ),
+          ),
+          const SizedBox(width: 10),
           // Botón enviar
           GestureDetector(
             onTap: _sendMessage,
@@ -514,9 +646,10 @@ class _ChatbotViewState extends State<ChatbotView> with TickerProviderStateMixin
 }
 
 class _ChatMessage {
+  final String id;
   final String text;
   final bool isUser;
-  _ChatMessage({required this.text, required this.isUser});
+  _ChatMessage({required this.text, required this.isUser, String? id}) : id = id ?? const Uuid().v4();
 }
 
 class _TypingDot extends StatefulWidget {
