@@ -19,7 +19,8 @@ class ChatbotView extends StatefulWidget {
   State<ChatbotView> createState() => _ChatbotViewState();
 }
 
-class _ChatbotViewState extends State<ChatbotView> with TickerProviderStateMixin {
+class _ChatbotViewState extends State<ChatbotView>
+    with TickerProviderStateMixin {
   final TextEditingController _messageController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   final List<_ChatMessage> _messages = [];
@@ -30,7 +31,6 @@ class _ChatbotViewState extends State<ChatbotView> with TickerProviderStateMixin
 
   final AudioPlayer _audioPlayer = AudioPlayer();
   final AudioRecorder _audioRecorder = AudioRecorder();
-  final String _sessionId = const Uuid().v4();
   bool _isRecording = false;
   String? _currentlyPlayingId;
 
@@ -42,7 +42,9 @@ class _ChatbotViewState extends State<ChatbotView> with TickerProviderStateMixin
 
   Future<void> _loadChatHistory() async {
     try {
-      final messages = await _messageService.getChatMessages(sessionId: _sessionId);
+      final messages = await _messageService.getChatMessages(
+        sessionId: _sessionId,
+      );
       if (messages.isEmpty) {
         if (mounted) {
           Future.delayed(const Duration(milliseconds: 400), () {
@@ -61,7 +63,9 @@ class _ChatbotViewState extends State<ChatbotView> with TickerProviderStateMixin
         if (mounted) {
           setState(() {
             for (var msg in messages) {
-              _messages.add(_ChatMessage(text: msg.content, isUser: msg.type == 'human'));
+              _messages.add(
+                _ChatMessage(text: msg.content, isUser: msg.type == 'human'),
+              );
             }
           });
           _scrollToBottom();
@@ -69,7 +73,9 @@ class _ChatbotViewState extends State<ChatbotView> with TickerProviderStateMixin
       }
     } catch (e) {
       if (mounted) {
-        _addBotMessage("¡Hola! Soy el asistente virtual. ¿En qué puedo ayudarte?");
+        _addBotMessage(
+          "¡Hola! Soy el asistente virtual. ¿En qué puedo ayudarte?",
+        );
       }
     }
   }
@@ -132,7 +138,9 @@ class _ChatbotViewState extends State<ChatbotView> with TickerProviderStateMixin
     } catch (e) {
       if (mounted) {
         setState(() => _isTyping = false);
-        _addBotMessage("Hubo un error al procesar tu solicitud. Intenta nuevamente.");
+        _addBotMessage(
+          "Hubo un error al procesar tu solicitud. Intenta nuevamente.",
+        );
       }
     }
   }
@@ -143,28 +151,16 @@ class _ChatbotViewState extends State<ChatbotView> with TickerProviderStateMixin
       setState(() => _currentlyPlayingId = null);
       return;
     }
-    
-    setState(() => _currentlyPlayingId = messageId);
-    
-    try {
-      final response = await http.post(
-        Uri.parse('${AppConstants.businessBotEndpoint}/tts'),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({'text': text}),
-      );
 
-      if (response.statusCode == 200) {
-        final tempDir = await getTemporaryDirectory();
-        final file = File('${tempDir.path}/tts_$messageId.mp3');
-        await file.writeAsBytes(response.bodyBytes);
-        
-        await _audioPlayer.play(DeviceFileSource(file.path));
-        _audioPlayer.onPlayerComplete.listen((_) {
-          if (mounted) setState(() => _currentlyPlayingId = null);
-        });
-      } else {
-        setState(() => _currentlyPlayingId = null);
-      }
+    setState(() => _currentlyPlayingId = messageId);
+
+    try {
+      final url = '${AppConstants.businessBotEndpoint}/tts?text=${Uri.encodeComponent(text)}';
+      await _audioPlayer.play(UrlSource(url));
+
+      _audioPlayer.onPlayerComplete.listen((_) {
+        if (mounted) setState(() => _currentlyPlayingId = null);
+      });
     } catch (e) {
       print('Error TTS: $e');
       setState(() => _currentlyPlayingId = null);
@@ -181,7 +177,8 @@ class _ChatbotViewState extends State<ChatbotView> with TickerProviderStateMixin
     } else {
       if (await _audioRecorder.hasPermission()) {
         final tempDir = await getTemporaryDirectory();
-        final path = '${tempDir.path}/audio_${DateTime.now().millisecondsSinceEpoch}.m4a';
+        final path =
+            '${tempDir.path}/audio_${DateTime.now().millisecondsSinceEpoch}.m4a';
         await _audioRecorder.start(const RecordConfig(), path: path);
         setState(() => _isRecording = true);
       } else {
@@ -193,10 +190,20 @@ class _ChatbotViewState extends State<ChatbotView> with TickerProviderStateMixin
   }
 
   Future<void> _sendAudioForSTT(String path) async {
-    setState(() => _isTyping = true); 
+    setState(() => _isTyping = true);
     try {
-      var request = http.MultipartRequest('POST', Uri.parse('${AppConstants.businessBotEndpoint}/stt'));
-      request.files.add(await http.MultipartFile.fromPath('file', path));
+      var request = http.MultipartRequest(
+        'POST',
+        Uri.parse('${AppConstants.businessBotEndpoint}/stt'),
+      );
+      
+      if (path.startsWith('blob:')) {
+        var audioResponse = await http.get(Uri.parse(path));
+        request.files.add(http.MultipartFile.fromBytes('file', audioResponse.bodyBytes, filename: 'audio.m4a'));
+      } else {
+        request.files.add(await http.MultipartFile.fromPath('file', path));
+      }
+      
       var response = await request.send();
       if (response.statusCode == 200) {
         var responseData = await response.stream.bytesToString();
@@ -206,9 +213,21 @@ class _ChatbotViewState extends State<ChatbotView> with TickerProviderStateMixin
           _messageController.text = text;
           _sendMessage();
         }
+      } else {
+        var responseData = await response.stream.bytesToString();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Error STT (${response.statusCode}): $responseData')),
+          );
+        }
       }
     } catch (e) {
       print('Error STT: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error de conexión STT: $e')),
+        );
+      }
     } finally {
       if (mounted) setState(() => _isTyping = false);
     }
@@ -234,7 +253,11 @@ class _ChatbotViewState extends State<ChatbotView> with TickerProviderStateMixin
               child: Row(
                 children: [
                   IconButton(
-                    icon: const Icon(Icons.arrow_back_ios, color: Colors.white, size: 20),
+                    icon: const Icon(
+                      Icons.arrow_back_ios,
+                      color: Colors.white,
+                      size: 20,
+                    ),
                     onPressed: () => Navigator.pop(context),
                   ),
                   // Avatar bot
@@ -244,9 +267,17 @@ class _ChatbotViewState extends State<ChatbotView> with TickerProviderStateMixin
                     decoration: BoxDecoration(
                       color: Colors.white.withOpacity(0.2),
                       shape: BoxShape.circle,
-                      border: Border.all(color: Colors.white.withOpacity(0.4), width: 2),
+                      border: Border.all(
+                        color: Colors.white.withOpacity(0.4),
+                        width: 2,
+                      ),
                     ),
-                    child: Image.asset('assets/images/logo.png', width: 22, height: 22, fit: BoxFit.contain),
+                    child: Image.asset(
+                      'assets/images/logo.png',
+                      width: 22,
+                      height: 22,
+                      fit: BoxFit.contain,
+                    ),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
@@ -287,7 +318,10 @@ class _ChatbotViewState extends State<ChatbotView> with TickerProviderStateMixin
                   ),
                   // Badge IA
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 4,
+                    ),
                     decoration: BoxDecoration(
                       color: Colors.white.withOpacity(0.2),
                       borderRadius: BorderRadius.circular(20),
@@ -318,7 +352,10 @@ class _ChatbotViewState extends State<ChatbotView> with TickerProviderStateMixin
                 ? _buildEmptyState()
                 : ListView.builder(
                     controller: _scrollController,
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 16,
+                    ),
                     itemCount: _messages.length + (_isTyping ? 1 : 0),
                     itemBuilder: (context, index) {
                       if (index == _messages.length && _isTyping) {
@@ -360,7 +397,12 @@ class _ChatbotViewState extends State<ChatbotView> with TickerProviderStateMixin
                 ),
               ],
             ),
-            child: Image.asset('assets/images/logo.png', width: 40, height: 40, fit: BoxFit.contain),
+            child: Image.asset(
+              'assets/images/logo.png',
+              width: 40,
+              height: 40,
+              fit: BoxFit.contain,
+            ),
           ),
           const SizedBox(height: 16),
           Text(
@@ -382,7 +424,9 @@ class _ChatbotViewState extends State<ChatbotView> with TickerProviderStateMixin
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: Row(
-        mainAxisAlignment: isUser ? MainAxisAlignment.end : MainAxisAlignment.start,
+        mainAxisAlignment: isUser
+            ? MainAxisAlignment.end
+            : MainAxisAlignment.start,
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
           if (!isUser) ...[
@@ -393,7 +437,12 @@ class _ChatbotViewState extends State<ChatbotView> with TickerProviderStateMixin
                 gradient: AppColors.primaryGradient,
                 shape: BoxShape.circle,
               ),
-              child: Image.asset('assets/images/logo.png', width: 16, height: 16, fit: BoxFit.contain),
+              child: Image.asset(
+                'assets/images/logo.png',
+                width: 16,
+                height: 16,
+                fit: BoxFit.contain,
+              ),
             ),
             const SizedBox(width: 8),
           ],
@@ -401,11 +450,13 @@ class _ChatbotViewState extends State<ChatbotView> with TickerProviderStateMixin
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               decoration: BoxDecoration(
-                gradient: isUser ? const LinearGradient(
-                  colors: [AppColors.primaryLight, AppColors.primary],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ) : null,
+                gradient: isUser
+                    ? const LinearGradient(
+                        colors: [AppColors.primaryLight, AppColors.primary],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      )
+                    : null,
                 color: isUser ? null : AppColors.white,
                 borderRadius: BorderRadius.only(
                   topLeft: const Radius.circular(18),
@@ -420,7 +471,9 @@ class _ChatbotViewState extends State<ChatbotView> with TickerProviderStateMixin
                     offset: const Offset(0, 2),
                   ),
                 ],
-                border: isUser ? null : Border.all(color: AppColors.divider, width: 0.5),
+                border: isUser
+                    ? null
+                    : Border.all(color: AppColors.divider, width: 0.5),
               ),
               child: Text(
                 message.text,
@@ -436,19 +489,38 @@ class _ChatbotViewState extends State<ChatbotView> with TickerProviderStateMixin
             const SizedBox(width: 8),
             GestureDetector(
               onTap: () => _playAudio(message.text, message.id),
-              child: Container(
-                width: 32,
-                height: 32,
-                decoration: BoxDecoration(
-                  color: _currentlyPlayingId == message.id ? AppColors.primary : AppColors.primarySurface,
-                  shape: BoxShape.circle,
-                  border: Border.all(color: AppColors.primary.withOpacity(0.2)),
-                ),
-                child: Icon(
-                  _currentlyPlayingId == message.id ? Icons.stop_rounded : Icons.volume_up_rounded,
-                  color: _currentlyPlayingId == message.id ? Colors.white : AppColors.primary,
-                  size: 18,
-                ),
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  if (_currentlyPlayingId == message.id)
+                    const SizedBox(
+                      width: 40,
+                      height: 40,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                      ),
+                    ),
+                  Container(
+                    width: 32,
+                    height: 32,
+                    decoration: BoxDecoration(
+                      color: _currentlyPlayingId == message.id
+                          ? AppColors.primary
+                          : AppColors.primarySurface,
+                      shape: BoxShape.circle,
+                      border: Border.all(color: AppColors.primary.withOpacity(0.2)),
+                    ),
+                    child: Icon(
+                      _currentlyPlayingId == message.id
+                          ? Icons.stop_rounded
+                          : Icons.volume_up_rounded,
+                      color: _currentlyPlayingId == message.id
+                          ? Colors.white
+                          : AppColors.primary,
+                      size: 18,
+                    ),
+                  ),
+                ],
               ),
             ),
           ],
@@ -462,7 +534,11 @@ class _ChatbotViewState extends State<ChatbotView> with TickerProviderStateMixin
                 shape: BoxShape.circle,
                 border: Border.all(color: AppColors.primary.withOpacity(0.2)),
               ),
-              child: const Icon(Icons.person, color: AppColors.primary, size: 16),
+              child: const Icon(
+                Icons.person,
+                color: AppColors.primary,
+                size: 16,
+              ),
             ),
           ],
         ],
@@ -482,7 +558,12 @@ class _ChatbotViewState extends State<ChatbotView> with TickerProviderStateMixin
               gradient: AppColors.primaryGradient,
               shape: BoxShape.circle,
             ),
-            child: Image.asset('assets/images/logo.png', width: 16, height: 16, fit: BoxFit.contain),
+            child: Image.asset(
+              'assets/images/logo.png',
+              width: 16,
+              height: 16,
+              fit: BoxFit.contain,
+            ),
           ),
           const SizedBox(width: 8),
           Container(
@@ -595,11 +676,16 @@ class _ChatbotViewState extends State<ChatbotView> with TickerProviderStateMixin
                         border: InputBorder.none,
                         enabledBorder: InputBorder.none,
                         focusedBorder: InputBorder.none,
-                        contentPadding: const EdgeInsets.symmetric(vertical: 12),
+                        contentPadding: const EdgeInsets.symmetric(
+                          vertical: 12,
+                        ),
                         isDense: true,
                       ),
                       onSubmitted: (_) => _sendMessage(),
-                      style: GoogleFonts.poppins(fontSize: 14, color: AppColors.textPrimary),
+                      style: GoogleFonts.poppins(
+                        fontSize: 14,
+                        color: AppColors.textPrimary,
+                      ),
                     ),
                   ),
                   const SizedBox(width: 8),
@@ -609,21 +695,35 @@ class _ChatbotViewState extends State<ChatbotView> with TickerProviderStateMixin
           ),
           const SizedBox(width: 10),
           // Botón Micrófono
-          GestureDetector(
-            onTap: _toggleRecording,
-            child: Container(
-              width: 48,
-              height: 48,
-              decoration: BoxDecoration(
-                color: _isRecording ? Colors.red : AppColors.primarySurface,
-                shape: BoxShape.circle,
+          Stack(
+            alignment: Alignment.center,
+            children: [
+              if (_isRecording)
+                const SizedBox(
+                  width: 56,
+                  height: 56,
+                  child: CircularProgressIndicator(
+                    valueColor: AlwaysStoppedAnimation<Color>(Colors.red),
+                    strokeWidth: 2,
+                  ),
+                ),
+              GestureDetector(
+                onTap: _toggleRecording,
+                child: Container(
+                  width: 48,
+                  height: 48,
+                  decoration: BoxDecoration(
+                    color: _isRecording ? Colors.red : AppColors.primarySurface,
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    _isRecording ? Icons.stop_rounded : Icons.mic_rounded,
+                    color: _isRecording ? Colors.white : AppColors.primary,
+                    size: 20,
+                  ),
+                ),
               ),
-              child: Icon(
-                _isRecording ? Icons.stop_rounded : Icons.mic_rounded,
-                color: _isRecording ? Colors.white : AppColors.primary,
-                size: 20,
-              ),
-            ),
+            ],
           ),
           const SizedBox(width: 10),
           // Botón enviar
@@ -636,7 +736,11 @@ class _ChatbotViewState extends State<ChatbotView> with TickerProviderStateMixin
                 gradient: AppColors.primaryGradient,
                 shape: BoxShape.circle,
               ),
-              child: const Icon(Icons.send_rounded, color: Colors.white, size: 20),
+              child: const Icon(
+                Icons.send_rounded,
+                color: Colors.white,
+                size: 20,
+              ),
             ),
           ),
         ],
@@ -649,7 +753,8 @@ class _ChatMessage {
   final String id;
   final String text;
   final bool isUser;
-  _ChatMessage({required this.text, required this.isUser, String? id}) : id = id ?? const Uuid().v4();
+  _ChatMessage({required this.text, required this.isUser, String? id})
+    : id = id ?? const Uuid().v4();
 }
 
 class _TypingDot extends StatefulWidget {
@@ -660,7 +765,8 @@ class _TypingDot extends StatefulWidget {
   State<_TypingDot> createState() => _TypingDotState();
 }
 
-class _TypingDotState extends State<_TypingDot> with SingleTickerProviderStateMixin {
+class _TypingDotState extends State<_TypingDot>
+    with SingleTickerProviderStateMixin {
   late AnimationController _controller;
   late Animation<double> _anim;
 
@@ -671,9 +777,10 @@ class _TypingDotState extends State<_TypingDot> with SingleTickerProviderStateMi
       vsync: this,
       duration: const Duration(milliseconds: 600),
     );
-    _anim = Tween<double>(begin: 0, end: 1).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
-    );
+    _anim = Tween<double>(
+      begin: 0,
+      end: 1,
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeInOut));
     Future.delayed(Duration(milliseconds: widget.delay), () {
       if (mounted) _controller.repeat(reverse: true);
     });

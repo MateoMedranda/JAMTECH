@@ -243,7 +243,7 @@ class BusinessBotService:
         if not api_key:
             raise Exception("ELEVENLABS_API_KEY no configurado")
         
-        voice_id = "21m00Tcm4TlvDq8ikWAM" # Rachel
+        voice_id = "JBFqnCBsd6RMkjVDRZzb" # George, voz garantizada para plan gratuito
         url = f"https://api.elevenlabs.io/v1/text-to-speech/{voice_id}"
         headers = {
             "xi-api-key": api_key,
@@ -275,10 +275,15 @@ class BusinessBotService:
         if not api_key:
             raise Exception("ELEVENLABS_API_KEY no configurado")
             
+        import mimetypes
+        mime_type, _ = mimetypes.guess_type(filename)
+        if not mime_type:
+            mime_type = "audio/wav"
+            
         url = "https://api.elevenlabs.io/v1/speech-to-text"
         headers = {"xi-api-key": api_key}
         data = {"model_id": "scribe_v1"}
-        files = {"file": (filename, audio_bytes, "audio/wav")}
+        files = {"file": (filename, audio_bytes, mime_type)}
         
         import asyncio
         loop = asyncio.get_event_loop()
