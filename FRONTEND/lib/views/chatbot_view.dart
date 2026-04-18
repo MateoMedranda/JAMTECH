@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../config/theme/app_colors.dart';
+import '../services/message_service.dart';
 
 class ChatbotView extends StatefulWidget {
   const ChatbotView({super.key});
@@ -14,22 +15,48 @@ class _ChatbotViewState extends State<ChatbotView> with TickerProviderStateMixin
   final ScrollController _scrollController = ScrollController();
   final List<_ChatMessage> _messages = [];
   bool _isTyping = false;
+  final MessageService _messageService = MessageService();
+  final String _sessionId = "1";
+  final String _userId = "1";
 
   @override
   void initState() {
     super.initState();
-    // Mensaje de bienvenida
-    Future.delayed(const Duration(milliseconds: 400), () {
-      _addBotMessage(
-        '¡Hola! 👋 Soy el asistente virtual de **JAMTECH**.\n\n'
-        'Puedo ayudarte con:\n'
-        '• Consultas sobre transacciones\n'
-        '• Soporte para cobros y pagos\n'
-        '• Información de tu cuenta\n'
-        '• Reportes y estadísticas\n\n'
-        '¿En qué puedo ayudarte hoy?',
-      );
-    });
+    _loadChatHistory();
+  }
+
+  Future<void> _loadChatHistory() async {
+    try {
+      final messages = await _messageService.getChatMessages(sessionId: _sessionId);
+      if (messages.isEmpty) {
+        if (mounted) {
+          Future.delayed(const Duration(milliseconds: 400), () {
+            _addBotMessage(
+              '¡Hola! 👋 Soy el asistente virtual de **JAMTECH**.\n\n'
+              'Puedo ayudarte con:\n'
+              '• Consultas sobre transacciones\n'
+              '• Soporte para cobros y pagos\n'
+              '• Información de tu cuenta\n'
+              '• Reportes y estadísticas\n\n'
+              '¿En qué puedo ayudarte hoy?',
+            );
+          });
+        }
+      } else {
+        if (mounted) {
+          setState(() {
+            for (var msg in messages) {
+              _messages.add(_ChatMessage(text: msg.content, isUser: msg.type == 'human'));
+            }
+          });
+          _scrollToBottom();
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        _addBotMessage("¡Hola! Soy el asistente virtual. ¿En qué puedo ayudarte?");
+      }
+    }
   }
 
   @override
@@ -74,15 +101,22 @@ class _ChatbotViewState extends State<ChatbotView> with TickerProviderStateMixin
 
     setState(() => _isTyping = true);
 
-    // Simular respuesta del bot (placeholder hasta conectar backend)
-    await Future.delayed(const Duration(milliseconds: 1500));
-
-    if (mounted) {
-      setState(() => _isTyping = false);
-      _addBotMessage(
-        'Entendido. Esta funcionalidad estará disponible cuando '
-        'conectemos con el backend. Por ahora estoy en modo demostración. 🔧',
+    try {
+      final responseMsg = await _messageService.sendMessage(
+        userId: _userId,
+        sessionId: _sessionId,
+        message: text,
       );
+
+      if (mounted) {
+        setState(() => _isTyping = false);
+        _addBotMessage(responseMsg.content);
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isTyping = false);
+        _addBotMessage("Hubo un error al procesar tu solicitud. Intenta nuevamente.");
+      }
     }
   }
 
