@@ -152,7 +152,7 @@ class _ChatbotViewState extends State<ChatbotView> with TickerProviderStateMixin
                       shape: BoxShape.circle,
                       border: Border.all(color: Colors.white.withOpacity(0.4), width: 2),
                     ),
-                    child: const Icon(Icons.smart_toy_rounded, color: Colors.white, size: 22),
+                    child: Image.asset('assets/images/logo.png', width: 22, height: 22, fit: BoxFit.contain),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
@@ -266,7 +266,7 @@ class _ChatbotViewState extends State<ChatbotView> with TickerProviderStateMixin
                 ),
               ],
             ),
-            child: const Icon(Icons.smart_toy_rounded, color: Colors.white, size: 40),
+            child: Image.asset('assets/images/logo.png', width: 40, height: 40, fit: BoxFit.contain),
           ),
           const SizedBox(height: 16),
           Text(
@@ -299,7 +299,7 @@ class _ChatbotViewState extends State<ChatbotView> with TickerProviderStateMixin
                 gradient: AppColors.primaryGradient,
                 shape: BoxShape.circle,
               ),
-              child: const Icon(Icons.smart_toy_rounded, color: Colors.white, size: 16),
+              child: Image.asset('assets/images/logo.png', width: 16, height: 16, fit: BoxFit.contain),
             ),
             const SizedBox(width: 8),
           ],
@@ -368,7 +368,7 @@ class _ChatbotViewState extends State<ChatbotView> with TickerProviderStateMixin
               gradient: AppColors.primaryGradient,
               shape: BoxShape.circle,
             ),
-            child: const Icon(Icons.smart_toy_rounded, color: Colors.white, size: 16),
+            child: Image.asset('assets/images/logo.png', width: 16, height: 16, fit: BoxFit.contain),
           ),
           const SizedBox(width: 8),
           Container(
