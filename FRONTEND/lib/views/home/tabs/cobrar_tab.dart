@@ -12,14 +12,14 @@ class CobrarTab extends StatefulWidget {
 
 class _CobrarTabState extends State<CobrarTab> with SingleTickerProviderStateMixin {
   late TabController _tabController;
-  String _monto = '0';
+  String _monto = '5';
   String _motivo = '';
   bool _motivoExpanded = false;
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
+    _tabController = TabController(length: 2, vsync: this);
   }
 
   @override
@@ -37,15 +37,15 @@ class _CobrarTabState extends State<CobrarTab> with SingleTickerProviderStateMix
         } else {
           _monto = '0';
         }
-      } else if (valor == '.') {
-        if (!_monto.contains('.')) {
-          _monto = '$_monto.';
+      } else if (valor == ',') {
+        if (!_monto.contains(',')) {
+          _monto = '$_monto,';
         }
       } else {
         if (_monto == '0') {
           _monto = valor;
-        } else if (_monto.contains('.')) {
-          final decimalPart = _monto.split('.')[1];
+        } else if (_monto.contains(',')) {
+          final decimalPart = _monto.split(',')[1];
           if (decimalPart.length < 2) {
             _monto = '$_monto$valor';
           }
@@ -59,55 +59,20 @@ class _CobrarTabState extends State<CobrarTab> with SingleTickerProviderStateMix
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.white,
+      backgroundColor: Colors.white,
       body: Column(
         children: [
           // ── Monto grande ─────────────────────────────────────────────
           Expanded(
             child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                // Tabs QR / Tarjeta / Manual
-                Container(
-                  margin: const EdgeInsets.fromLTRB(24, 20, 24, 0),
-                  height: 44,
-                  decoration: BoxDecoration(
-                    color: AppColors.grey,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: TabBar(
-                    controller: _tabController,
-                    indicator: BoxDecoration(
-                      color: AppColors.primary,
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    indicatorSize: TabBarIndicatorSize.tab,
-                    dividerColor: Colors.transparent,
-                    labelColor: Colors.white,
-                    unselectedLabelColor: AppColors.textSecondary,
-                    labelStyle: GoogleFonts.poppins(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                    ),
-                    unselectedLabelStyle: GoogleFonts.poppins(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w500,
-                    ),
-                    padding: const EdgeInsets.all(3),
-                    tabs: const [
-                      Tab(text: 'QR'),
-                      Tab(text: 'Tarjeta'),
-                      Tab(text: 'Manual'),
-                    ],
-                  ),
-                ),
-
-                const SizedBox(height: 32),
-
-                // Monto
+                const Spacer(),
+                // Monto Text
                 Text(
                   'Monto',
                   style: GoogleFonts.poppins(
-                    fontSize: 14,
+                    fontSize: 16,
                     fontWeight: FontWeight.w500,
                     color: AppColors.textSecondary,
                   ),
@@ -121,61 +86,94 @@ class _CobrarTabState extends State<CobrarTab> with SingleTickerProviderStateMix
                     Text(
                       '\$',
                       style: GoogleFonts.poppins(
-                        fontSize: 32,
-                        fontWeight: FontWeight.w700,
+                        fontSize: 48,
+                        fontWeight: FontWeight.w600,
                         color: AppColors.textPrimary,
                       ),
                     ),
-                    const SizedBox(width: 4),
+                    const SizedBox(width: 8),
                     Text(
                       _monto,
                       style: GoogleFonts.poppins(
-                        fontSize: 56,
-                        fontWeight: FontWeight.w800,
+                        fontSize: 72,
+                        fontWeight: FontWeight.w600,
                         color: AppColors.textPrimary,
-                        letterSpacing: -1,
+                        letterSpacing: -2,
                       ),
                     ),
                   ],
                 ),
-
-                const SizedBox(height: 16),
-
+                const SizedBox(height: 24),
+                
+                // Tabs QR / Manual
+                Container(
+                  margin: const EdgeInsets.symmetric(horizontal: 48),
+                  height: 44,
+                  decoration: BoxDecoration(
+                    color: AppColors.background,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: TabBar(
+                    controller: _tabController,
+                    indicator: BoxDecoration(
+                      color: AppColors.primaryDark,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    indicatorSize: TabBarIndicatorSize.tab,
+                    dividerColor: Colors.transparent,
+                    labelColor: Colors.white,
+                    unselectedLabelColor: AppColors.primaryDark,
+                    labelStyle: GoogleFonts.poppins(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                    ),
+                    unselectedLabelStyle: GoogleFonts.poppins(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                    ),
+                    padding: const EdgeInsets.all(4),
+                    tabs: const [
+                      Tab(text: 'QR'),
+                      Tab(text: 'Manual'),
+                    ],
+                  ),
+                ),
+                const Spacer(),
+                
                 // Agregar motivo
+                const Divider(height: 1, color: AppColors.divider),
                 GestureDetector(
                   onTap: () {
                     setState(() => _motivoExpanded = !_motivoExpanded);
                   },
                   child: Container(
-                    margin: const EdgeInsets.symmetric(horizontal: 32),
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                    decoration: BoxDecoration(
-                      border: Border.all(color: AppColors.divider),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
+                    color: Colors.transparent,
+                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Text(
                           _motivo.isEmpty ? 'Agregar motivo (opcional)' : _motivo,
                           style: GoogleFonts.poppins(
-                            fontSize: 13,
-                            color: _motivo.isEmpty ? AppColors.textHint : AppColors.textPrimary,
+                            fontSize: 14,
+                            color: AppColors.textSecondary,
+                            fontWeight: FontWeight.w500,
                           ),
                         ),
                         Icon(
-                          _motivoExpanded ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_right,
-                          color: AppColors.textSecondary,
-                          size: 20,
+                          _motivoExpanded ? Icons.keyboard_arrow_up : Icons.chevron_right_rounded,
+                          color: AppColors.textPrimary,
+                          size: 24,
                         ),
                       ],
                     ),
                   ),
                 ),
+                const Divider(height: 1, color: AppColors.divider),
 
                 if (_motivoExpanded) ...[
                   Padding(
-                    padding: const EdgeInsets.fromLTRB(32, 8, 32, 0),
+                    padding: const EdgeInsets.fromLTRB(24, 12, 24, 0),
                     child: TextField(
                       autofocus: true,
                       onChanged: (val) => setState(() => _motivo = val),
@@ -187,7 +185,7 @@ class _CobrarTabState extends State<CobrarTab> with SingleTickerProviderStateMix
                         fillColor: AppColors.background,
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(10),
-                          borderSide: const BorderSide(color: AppColors.divider),
+                          borderSide: BorderSide.none,
                         ),
                         contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                       ),
@@ -200,16 +198,13 @@ class _CobrarTabState extends State<CobrarTab> with SingleTickerProviderStateMix
 
           // ── Teclado numérico ──────────────────────────────────────────
           Container(
-            padding: const EdgeInsets.fromLTRB(24, 16, 24, 8),
+            padding: const EdgeInsets.fromLTRB(32, 16, 32, 16),
             child: Column(
               children: [
                 _buildFila(['1', '2', '3']),
-                const SizedBox(height: 8),
                 _buildFila(['4', '5', '6']),
-                const SizedBox(height: 8),
                 _buildFila(['7', '8', '9']),
-                const SizedBox(height: 8),
-                _buildFila(['.', '0', 'DEL']),
+                _buildFila([',', '0', 'DEL']),
               ],
             ),
           ),
@@ -221,9 +216,8 @@ class _CobrarTabState extends State<CobrarTab> with SingleTickerProviderStateMix
               width: double.infinity,
               height: 56,
               child: ElevatedButton(
-                onPressed: _monto != '0' && _monto != '0.'
+                onPressed: _monto != '0' && _monto != '0,'
                     ? () {
-                        // TODO: Conectar con backend
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(
                             content: Text(
@@ -238,7 +232,7 @@ class _CobrarTabState extends State<CobrarTab> with SingleTickerProviderStateMix
                       }
                     : null,
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.primary,
+                  backgroundColor: AppColors.primaryDark,
                   disabledBackgroundColor: AppColors.greyMedium,
                   foregroundColor: Colors.white,
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
@@ -262,32 +256,33 @@ class _CobrarTabState extends State<CobrarTab> with SingleTickerProviderStateMix
 
   Widget _buildFila(List<String> teclas) {
     return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
       children: teclas.map((tecla) {
         final esDel = tecla == 'DEL';
         return Expanded(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 4),
-            child: GestureDetector(
-              onTap: () => _presionarTecla(tecla),
-              child: Container(
-                height: 64,
-                decoration: BoxDecoration(
-                  color: esDel ? AppColors.primarySurface : AppColors.grey,
-                  borderRadius: BorderRadius.circular(14),
-                  border: esDel ? Border.all(color: AppColors.primary.withOpacity(0.2)) : null,
-                ),
-                child: Center(
-                  child: esDel
-                      ? const Icon(Icons.backspace_outlined, color: AppColors.primary, size: 22)
-                      : Text(
-                          tecla,
-                          style: GoogleFonts.poppins(
-                            fontSize: 22,
-                            fontWeight: FontWeight.w600,
-                            color: AppColors.textPrimary,
-                          ),
+          child: GestureDetector(
+            onTap: () => _presionarTecla(tecla),
+            behavior: HitTestBehavior.opaque,
+            child: SizedBox(
+              height: 64,
+              child: Center(
+                child: esDel
+                    ? Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: AppColors.primaryDark,
+                          borderRadius: BorderRadius.circular(6),
                         ),
-                ),
+                        child: const Icon(Icons.backspace_rounded, color: Colors.white, size: 20),
+                      )
+                    : Text(
+                        tecla,
+                        style: GoogleFonts.poppins(
+                          fontSize: 28,
+                          fontWeight: FontWeight.w400,
+                          color: AppColors.primaryDark,
+                        ),
+                      ),
               ),
             ),
           ),

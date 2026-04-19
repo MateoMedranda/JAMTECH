@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from contextlib import asynccontextmanager
 import config  # Importar config para cargar las variables de entorno
 from routers.BusinessBotRouter import router as business_bot_router
+from routers.AnalyticsRouter import router as analytics_router
 from database.mongodb import connect_to_mongo, close_mongo_connection
 from services.BusinessBotService import initialize_chatbot
 from fastapi.middleware.cors import CORSMiddleware
@@ -35,6 +36,7 @@ app.add_middleware(
 )
 
 app.include_router(business_bot_router)
+app.include_router(analytics_router)
 
 @app.get("/")
 def read_root():

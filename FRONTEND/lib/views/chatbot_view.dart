@@ -11,6 +11,11 @@ import 'package:permission_handler/permission_handler.dart';
 import '../../config/constants.dart';
 import 'package:uuid/uuid.dart';
 import '../services/message_service.dart';
+import '../models/conversation_model.dart';
+import 'package:flutter_markdown/flutter_markdown.dart';
+import '../widgets/chart_data_parser.dart';
+import '../widgets/chat_chart_widget.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 
 class ChatbotView extends StatefulWidget {
   const ChatbotView({super.key});
@@ -19,18 +24,20 @@ class ChatbotView extends StatefulWidget {
   State<ChatbotView> createState() => _ChatbotViewState();
 }
 
-class _ChatbotViewState extends State<ChatbotView> with TickerProviderStateMixin {
+class _ChatbotViewState extends State<ChatbotView>
+    with TickerProviderStateMixin {
   final TextEditingController _messageController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   final List<_ChatMessage> _messages = [];
   bool _isTyping = false;
   final MessageService _messageService = MessageService();
-  final String _sessionId = "1";
+  String _sessionId = const Uuid().v4();
   final String _userId = "1";
+  List<Conversation> _conversations = [];
+  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
 
   final AudioPlayer _audioPlayer = AudioPlayer();
   final AudioRecorder _audioRecorder = AudioRecorder();
-  final String _sessionId = const Uuid().v4();
   bool _isRecording = false;
   String? _currentlyPlayingId;
 
@@ -38,11 +45,23 @@ class _ChatbotViewState extends State<ChatbotView> with TickerProviderStateMixin
   void initState() {
     super.initState();
     _loadChatHistory();
+    _loadUserConversations();
+  }
+
+  Future<void> _loadUserConversations() async {
+    final convs = await _messageService.getUserConversations(_userId);
+    if (mounted) {
+      setState(() {
+        _conversations = convs;
+      });
+    }
   }
 
   Future<void> _loadChatHistory() async {
     try {
-      final messages = await _messageService.getChatMessages(sessionId: _sessionId);
+      final messages = await _messageService.getChatMessages(
+        sessionId: _sessionId,
+      );
       if (messages.isEmpty) {
         if (mounted) {
           Future.delayed(const Duration(milliseconds: 400), () {
@@ -61,7 +80,14 @@ class _ChatbotViewState extends State<ChatbotView> with TickerProviderStateMixin
         if (mounted) {
           setState(() {
             for (var msg in messages) {
-              _messages.add(_ChatMessage(text: msg.content, isUser: msg.type == 'human'));
+              final isUser = msg.type == 'human';
+              _messages.add(
+                _ChatMessage(
+                  text: msg.content,
+                  isUser: isUser,
+                  chartData: isUser ? null : ChartDataParser.parse(msg.content),
+                ),
+              );
             }
           });
           _scrollToBottom();
@@ -69,7 +95,9 @@ class _ChatbotViewState extends State<ChatbotView> with TickerProviderStateMixin
       }
     } catch (e) {
       if (mounted) {
-        _addBotMessage("¡Hola! Soy el asistente virtual. ¿En qué puedo ayudarte?");
+        _addBotMessage(
+          "¡Hola! Soy el asistente virtual. ¿En qué puedo ayudarte?",
+        );
       }
     }
   }
@@ -84,8 +112,9 @@ class _ChatbotViewState extends State<ChatbotView> with TickerProviderStateMixin
   }
 
   void _addBotMessage(String text) {
+    final chartData = ChartDataParser.parse(text);
     setState(() {
-      _messages.add(_ChatMessage(text: text, isUser: false));
+      _messages.add(_ChatMessage(text: text, isUser: false, chartData: chartData));
     });
     _scrollToBottom();
   }
@@ -128,11 +157,14 @@ class _ChatbotViewState extends State<ChatbotView> with TickerProviderStateMixin
       if (mounted) {
         setState(() => _isTyping = false);
         _addBotMessage(responseMsg.content);
+        _loadUserConversations(); // Actualizar el drawer
       }
     } catch (e) {
       if (mounted) {
         setState(() => _isTyping = false);
-        _addBotMessage("Hubo un error al procesar tu solicitud. Intenta nuevamente.");
+        _addBotMessage(
+          "Hubo un error al procesar tu solicitud. Intenta nuevamente.",
+        );
       }
     }
   }
@@ -143,28 +175,16 @@ class _ChatbotViewState extends State<ChatbotView> with TickerProviderStateMixin
       setState(() => _currentlyPlayingId = null);
       return;
     }
-    
-    setState(() => _currentlyPlayingId = messageId);
-    
-    try {
-      final response = await http.post(
-        Uri.parse('${AppConstants.businessBotEndpoint}/tts'),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({'text': text}),
-      );
 
-      if (response.statusCode == 200) {
-        final tempDir = await getTemporaryDirectory();
-        final file = File('${tempDir.path}/tts_$messageId.mp3');
-        await file.writeAsBytes(response.bodyBytes);
-        
-        await _audioPlayer.play(DeviceFileSource(file.path));
-        _audioPlayer.onPlayerComplete.listen((_) {
-          if (mounted) setState(() => _currentlyPlayingId = null);
-        });
-      } else {
-        setState(() => _currentlyPlayingId = null);
-      }
+    setState(() => _currentlyPlayingId = messageId);
+
+    try {
+      final url = '${AppConstants.businessBotEndpoint}/tts?text=${Uri.encodeComponent(text)}';
+      await _audioPlayer.play(UrlSource(url));
+
+      _audioPlayer.onPlayerComplete.listen((_) {
+        if (mounted) setState(() => _currentlyPlayingId = null);
+      });
     } catch (e) {
       print('Error TTS: $e');
       setState(() => _currentlyPlayingId = null);
@@ -173,30 +193,64 @@ class _ChatbotViewState extends State<ChatbotView> with TickerProviderStateMixin
 
   Future<void> _toggleRecording() async {
     if (_isRecording) {
-      final path = await _audioRecorder.stop();
-      setState(() => _isRecording = false);
-      if (path != null) {
-        _sendAudioForSTT(path);
+      try {
+        final path = await _audioRecorder.stop();
+        setState(() => _isRecording = false);
+        if (path != null) {
+          _sendAudioForSTT(path);
+        }
+      } catch (e) {
+        setState(() => _isRecording = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error al detener grabación: $e')),
+        );
       }
     } else {
-      if (await _audioRecorder.hasPermission()) {
-        final tempDir = await getTemporaryDirectory();
-        final path = '${tempDir.path}/audio_${DateTime.now().millisecondsSinceEpoch}.m4a';
-        await _audioRecorder.start(const RecordConfig(), path: path);
-        setState(() => _isRecording = true);
-      } else {
+      try {
+        if (await _audioRecorder.hasPermission()) {
+          if (kIsWeb) {
+            await _audioRecorder.start(
+              const RecordConfig(encoder: AudioEncoder.wav),
+              path: '', // Requerido por el compilador, pero ignorado en la Web
+            );
+          } else {
+            final tempDir = await getTemporaryDirectory();
+            final path = '${tempDir.path}/audio_${DateTime.now().millisecondsSinceEpoch}.wav';
+            await _audioRecorder.start(
+              const RecordConfig(encoder: AudioEncoder.wav),
+              path: path,
+            );
+          }
+          setState(() => _isRecording = true);
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Permiso de micrófono denegado.')),
+          );
+        }
+      } catch (e) {
+        print('Error al grabar: $e');
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Permiso de micrófono denegado.')),
+          SnackBar(content: Text('Error al iniciar micrófono: $e')),
         );
       }
     }
   }
 
   Future<void> _sendAudioForSTT(String path) async {
-    setState(() => _isTyping = true); 
+    setState(() => _isTyping = true);
     try {
-      var request = http.MultipartRequest('POST', Uri.parse('${AppConstants.businessBotEndpoint}/stt'));
-      request.files.add(await http.MultipartFile.fromPath('file', path));
+      var request = http.MultipartRequest(
+        'POST',
+        Uri.parse('${AppConstants.businessBotEndpoint}/stt'),
+      );
+      
+      if (path.startsWith('blob:')) {
+        var audioResponse = await http.get(Uri.parse(path));
+        request.files.add(http.MultipartFile.fromBytes('file', audioResponse.bodyBytes, filename: 'audio.wav'));
+      } else {
+        request.files.add(await http.MultipartFile.fromPath('file', path));
+      }
+      
       var response = await request.send();
       if (response.statusCode == 200) {
         var responseData = await response.stream.bytesToString();
@@ -206,9 +260,21 @@ class _ChatbotViewState extends State<ChatbotView> with TickerProviderStateMixin
           _messageController.text = text;
           _sendMessage();
         }
+      } else {
+        var responseData = await response.stream.bytesToString();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Error STT (${response.statusCode}): $responseData')),
+          );
+        }
       }
     } catch (e) {
       print('Error STT: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error de conexión STT: $e')),
+        );
+      }
     } finally {
       if (mounted) setState(() => _isTyping = false);
     }
@@ -217,7 +283,9 @@ class _ChatbotViewState extends State<ChatbotView> with TickerProviderStateMixin
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      key: _scaffoldKey,
       backgroundColor: AppColors.background,
+      endDrawer: _buildHistoryDrawer(),
       appBar: PreferredSize(
         preferredSize: const Size.fromHeight(70),
         child: Container(
@@ -234,7 +302,11 @@ class _ChatbotViewState extends State<ChatbotView> with TickerProviderStateMixin
               child: Row(
                 children: [
                   IconButton(
-                    icon: const Icon(Icons.arrow_back_ios, color: Colors.white, size: 20),
+                    icon: const Icon(
+                      Icons.arrow_back_ios,
+                      color: Colors.white,
+                      size: 20,
+                    ),
                     onPressed: () => Navigator.pop(context),
                   ),
                   // Avatar bot
@@ -244,9 +316,17 @@ class _ChatbotViewState extends State<ChatbotView> with TickerProviderStateMixin
                     decoration: BoxDecoration(
                       color: Colors.white.withOpacity(0.2),
                       shape: BoxShape.circle,
-                      border: Border.all(color: Colors.white.withOpacity(0.4), width: 2),
+                      border: Border.all(
+                        color: Colors.white.withOpacity(0.4),
+                        width: 2,
+                      ),
                     ),
-                    child: const Icon(Icons.smart_toy_rounded, color: Colors.white, size: 22),
+                    child: Image.asset(
+                      'assets/images/logo.png',
+                      width: 26,
+                      height: 26,
+                      fit: BoxFit.contain,
+                    ),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
@@ -267,17 +347,18 @@ class _ChatbotViewState extends State<ChatbotView> with TickerProviderStateMixin
                             Container(
                               width: 8,
                               height: 8,
-                              margin: const EdgeInsets.only(right: 5),
                               decoration: const BoxDecoration(
                                 color: Color(0xFF4ADE80),
                                 shape: BoxShape.circle,
                               ),
                             ),
+                            const SizedBox(width: 6),
                             Text(
                               'En línea',
                               style: GoogleFonts.poppins(
-                                color: Colors.white70,
+                                color: Colors.white.withOpacity(0.8),
                                 fontSize: 12,
+                                fontWeight: FontWeight.w500,
                               ),
                             ),
                           ],
@@ -287,7 +368,10 @@ class _ChatbotViewState extends State<ChatbotView> with TickerProviderStateMixin
                   ),
                   // Badge IA
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 4,
+                    ),
                     decoration: BoxDecoration(
                       color: Colors.white.withOpacity(0.2),
                       borderRadius: BorderRadius.circular(20),
@@ -301,6 +385,10 @@ class _ChatbotViewState extends State<ChatbotView> with TickerProviderStateMixin
                         fontSize: 12,
                       ),
                     ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.history_rounded, color: Colors.white),
+                    onPressed: () => _scaffoldKey.currentState?.openEndDrawer(),
                   ),
                   const SizedBox(width: 8),
                 ],
@@ -318,7 +406,10 @@ class _ChatbotViewState extends State<ChatbotView> with TickerProviderStateMixin
                 ? _buildEmptyState()
                 : ListView.builder(
                     controller: _scrollController,
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 16,
+                    ),
                     itemCount: _messages.length + (_isTyping ? 1 : 0),
                     itemBuilder: (context, index) {
                       if (index == _messages.length && _isTyping) {
@@ -360,7 +451,12 @@ class _ChatbotViewState extends State<ChatbotView> with TickerProviderStateMixin
                 ),
               ],
             ),
-            child: const Icon(Icons.smart_toy_rounded, color: Colors.white, size: 40),
+            child: Image.asset(
+              'assets/images/logo.png',
+              width: 40,
+              height: 40,
+              fit: BoxFit.contain,
+            ),
           ),
           const SizedBox(height: 16),
           Text(
@@ -382,73 +478,122 @@ class _ChatbotViewState extends State<ChatbotView> with TickerProviderStateMixin
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: Row(
-        mainAxisAlignment: isUser ? MainAxisAlignment.end : MainAxisAlignment.start,
+        mainAxisAlignment: isUser
+            ? MainAxisAlignment.end
+            : MainAxisAlignment.start,
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
           if (!isUser) ...[
             Container(
-              width: 32,
-              height: 32,
+              width: 38,
+              height: 38,
               decoration: const BoxDecoration(
                 gradient: AppColors.primaryGradient,
                 shape: BoxShape.circle,
               ),
-              child: const Icon(Icons.smart_toy_rounded, color: Colors.white, size: 16),
+              child: Image.asset(
+                'assets/images/logo.png',
+                width: 22,
+                height: 22,
+                fit: BoxFit.contain,
+              ),
             ),
             const SizedBox(width: 8),
           ],
           Flexible(
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              decoration: BoxDecoration(
-                gradient: isUser ? const LinearGradient(
-                  colors: [AppColors.primaryLight, AppColors.primary],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ) : null,
-                color: isUser ? null : AppColors.white,
-                borderRadius: BorderRadius.only(
-                  topLeft: const Radius.circular(18),
-                  topRight: const Radius.circular(18),
-                  bottomLeft: Radius.circular(isUser ? 18 : 4),
-                  bottomRight: Radius.circular(isUser ? 4 : 18),
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.05),
-                    blurRadius: 8,
-                    offset: const Offset(0, 2),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  decoration: BoxDecoration(
+                    gradient: isUser
+                        ? const LinearGradient(
+                            colors: [AppColors.primaryLight, AppColors.primary],
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                          )
+                        : null,
+                    color: isUser ? null : AppColors.white,
+                    borderRadius: BorderRadius.only(
+                      topLeft: const Radius.circular(18),
+                      topRight: const Radius.circular(18),
+                      bottomLeft: Radius.circular(isUser ? 18 : 4),
+                      bottomRight: Radius.circular(isUser ? 4 : 18),
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.05),
+                        blurRadius: 8,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                    border: isUser
+                        ? null
+                        : Border.all(color: AppColors.divider, width: 0.5),
                   ),
-                ],
-                border: isUser ? null : Border.all(color: AppColors.divider, width: 0.5),
-              ),
-              child: Text(
-                message.text,
-                style: GoogleFonts.poppins(
-                  fontSize: 14,
-                  color: isUser ? Colors.white : AppColors.textPrimary,
-                  height: 1.5,
+                  child: MarkdownBody(
+                    data: message.text,
+                    styleSheet: MarkdownStyleSheet(
+                      p: GoogleFonts.poppins(
+                        fontSize: 14,
+                        color: isUser ? Colors.white : AppColors.textPrimary,
+                        height: 1.5,
+                      ),
+                      listBullet: GoogleFonts.poppins(
+                        fontSize: 14,
+                        color: isUser ? Colors.white : AppColors.textPrimary,
+                      ),
+                      strong: GoogleFonts.poppins(
+                        fontSize: 14,
+                        color: isUser ? Colors.white : AppColors.primary,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
                 ),
-              ),
+                // Gráfico interactivo (solo para mensajes del bot con datos)
+                if (!isUser && message.chartData != null)
+                  ChatChartWidget(data: message.chartData!),
+              ],
             ),
           ),
           if (!isUser) ...[
             const SizedBox(width: 8),
             GestureDetector(
               onTap: () => _playAudio(message.text, message.id),
-              child: Container(
-                width: 32,
-                height: 32,
-                decoration: BoxDecoration(
-                  color: _currentlyPlayingId == message.id ? AppColors.primary : AppColors.primarySurface,
-                  shape: BoxShape.circle,
-                  border: Border.all(color: AppColors.primary.withOpacity(0.2)),
-                ),
-                child: Icon(
-                  _currentlyPlayingId == message.id ? Icons.stop_rounded : Icons.volume_up_rounded,
-                  color: _currentlyPlayingId == message.id ? Colors.white : AppColors.primary,
-                  size: 18,
-                ),
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  if (_currentlyPlayingId == message.id)
+                    const SizedBox(
+                      width: 40,
+                      height: 40,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                      ),
+                    ),
+                  Container(
+                    width: 32,
+                    height: 32,
+                    decoration: BoxDecoration(
+                      color: _currentlyPlayingId == message.id
+                          ? AppColors.primary
+                          : AppColors.primarySurface,
+                      shape: BoxShape.circle,
+                      border: Border.all(color: AppColors.primary.withOpacity(0.2)),
+                    ),
+                    child: Icon(
+                      _currentlyPlayingId == message.id
+                          ? Icons.stop_rounded
+                          : Icons.volume_up_rounded,
+                      color: _currentlyPlayingId == message.id
+                          ? Colors.white
+                          : AppColors.primary,
+                      size: 18,
+                    ),
+                  ),
+                ],
               ),
             ),
           ],
@@ -462,7 +607,11 @@ class _ChatbotViewState extends State<ChatbotView> with TickerProviderStateMixin
                 shape: BoxShape.circle,
                 border: Border.all(color: AppColors.primary.withOpacity(0.2)),
               ),
-              child: const Icon(Icons.person, color: AppColors.primary, size: 16),
+              child: const Icon(
+                Icons.person,
+                color: AppColors.primary,
+                size: 16,
+              ),
             ),
           ],
         ],
@@ -476,13 +625,18 @@ class _ChatbotViewState extends State<ChatbotView> with TickerProviderStateMixin
       child: Row(
         children: [
           Container(
-            width: 32,
-            height: 32,
+            width: 38,
+            height: 38,
             decoration: const BoxDecoration(
               gradient: AppColors.primaryGradient,
               shape: BoxShape.circle,
             ),
-            child: const Icon(Icons.smart_toy_rounded, color: Colors.white, size: 16),
+            child: Image.asset(
+              'assets/images/logo.png',
+              width: 22,
+              height: 22,
+              fit: BoxFit.contain,
+            ),
           ),
           const SizedBox(width: 8),
           Container(
@@ -595,11 +749,16 @@ class _ChatbotViewState extends State<ChatbotView> with TickerProviderStateMixin
                         border: InputBorder.none,
                         enabledBorder: InputBorder.none,
                         focusedBorder: InputBorder.none,
-                        contentPadding: const EdgeInsets.symmetric(vertical: 12),
+                        contentPadding: const EdgeInsets.symmetric(
+                          vertical: 12,
+                        ),
                         isDense: true,
                       ),
                       onSubmitted: (_) => _sendMessage(),
-                      style: GoogleFonts.poppins(fontSize: 14, color: AppColors.textPrimary),
+                      style: GoogleFonts.poppins(
+                        fontSize: 14,
+                        color: AppColors.textPrimary,
+                      ),
                     ),
                   ),
                   const SizedBox(width: 8),
@@ -609,21 +768,35 @@ class _ChatbotViewState extends State<ChatbotView> with TickerProviderStateMixin
           ),
           const SizedBox(width: 10),
           // Botón Micrófono
-          GestureDetector(
-            onTap: _toggleRecording,
-            child: Container(
-              width: 48,
-              height: 48,
-              decoration: BoxDecoration(
-                color: _isRecording ? Colors.red : AppColors.primarySurface,
-                shape: BoxShape.circle,
+          Stack(
+            alignment: Alignment.center,
+            children: [
+              if (_isRecording)
+                const SizedBox(
+                  width: 56,
+                  height: 56,
+                  child: CircularProgressIndicator(
+                    valueColor: AlwaysStoppedAnimation<Color>(Colors.red),
+                    strokeWidth: 2,
+                  ),
+                ),
+              GestureDetector(
+                onTap: _toggleRecording,
+                child: Container(
+                  width: 48,
+                  height: 48,
+                  decoration: BoxDecoration(
+                    color: _isRecording ? Colors.red : AppColors.primarySurface,
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    _isRecording ? Icons.stop_rounded : Icons.mic_rounded,
+                    color: _isRecording ? Colors.white : AppColors.primary,
+                    size: 20,
+                  ),
+                ),
               ),
-              child: Icon(
-                _isRecording ? Icons.stop_rounded : Icons.mic_rounded,
-                color: _isRecording ? Colors.white : AppColors.primary,
-                size: 20,
-              ),
-            ),
+            ],
           ),
           const SizedBox(width: 10),
           // Botón enviar
@@ -636,8 +809,146 @@ class _ChatbotViewState extends State<ChatbotView> with TickerProviderStateMixin
                 gradient: AppColors.primaryGradient,
                 shape: BoxShape.circle,
               ),
-              child: const Icon(Icons.send_rounded, color: Colors.white, size: 20),
+              child: const Icon(
+                Icons.send_rounded,
+                color: Colors.white,
+                size: 20,
+              ),
             ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildHistoryDrawer() {
+    return Drawer(
+      backgroundColor: AppColors.background,
+      child: SafeArea(
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Row(
+                children: [
+                  const Icon(Icons.history_rounded, color: AppColors.primary),
+                  const SizedBox(width: 12),
+                  Text(
+                    'Historial de Chats',
+                    style: GoogleFonts.poppins(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16.0),
+              child: ElevatedButton.icon(
+                onPressed: () {
+                  setState(() {
+                    _sessionId = const Uuid().v4();
+                    _messages.clear();
+                  });
+                  Navigator.pop(context); // close drawer
+                  _loadChatHistory();
+                },
+                icon: const Icon(Icons.add_rounded, color: Colors.white),
+                label: Text(
+                  'Nueva Conversación',
+                  style: GoogleFonts.poppins(
+                    fontWeight: FontWeight.w600,
+                    color: Colors.white,
+                  ),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primary,
+                  minimumSize: const Size(double.infinity, 48),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+              ),
+            ),
+            const Divider(height: 32),
+            Expanded(
+              child: _conversations.isEmpty
+                  ? Center(
+                      child: Text(
+                        'No hay conversaciones previas',
+                        style: GoogleFonts.poppins(color: AppColors.textSecondary),
+                      ),
+                    )
+                  : ListView.builder(
+                      itemCount: _conversations.length,
+                      itemBuilder: (context, index) {
+                        final conv = _conversations[index];
+                        return ListTile(
+                          leading: const Icon(Icons.chat_bubble_outline, color: AppColors.primary),
+                          title: Text(
+                            conv.title,
+                            style: GoogleFonts.poppins(
+                              fontWeight: FontWeight.w500,
+                              fontSize: 14,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          subtitle: Text(
+                            '${conv.updatedAt.day}/${conv.updatedAt.month}/${conv.updatedAt.year}',
+                            style: GoogleFonts.poppins(fontSize: 12),
+                          ),
+                          trailing: IconButton(
+                            icon: const Icon(Icons.delete_outline, color: AppColors.error),
+                            onPressed: () => _confirmDeleteConversation(conv.sessionId),
+                          ),
+                          onTap: () {
+                            setState(() {
+                              _sessionId = conv.sessionId;
+                              _messages.clear();
+                            });
+                            Navigator.pop(context);
+                            _loadChatHistory();
+                          },
+                        );
+                      },
+                    ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _confirmDeleteConversation(String sessionId) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Eliminar Chat', style: GoogleFonts.poppins(fontWeight: FontWeight.bold)),
+        content: Text('¿Estás seguro de que deseas eliminar este chat?', style: GoogleFonts.poppins()),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text('Cancelar', style: GoogleFonts.poppins(color: AppColors.textSecondary)),
+          ),
+          TextButton(
+            onPressed: () async {
+              Navigator.pop(ctx);
+              final success = await _messageService.deleteConversation(sessionId);
+              if (success) {
+                if (_sessionId == sessionId) {
+                  setState(() {
+                    _sessionId = const Uuid().v4();
+                    _messages.clear();
+                  });
+                  _loadChatHistory();
+                }
+                _loadUserConversations();
+              }
+            },
+            child: Text('Eliminar', style: GoogleFonts.poppins(color: AppColors.error, fontWeight: FontWeight.bold)),
           ),
         ],
       ),
@@ -649,7 +960,9 @@ class _ChatMessage {
   final String id;
   final String text;
   final bool isUser;
-  _ChatMessage({required this.text, required this.isUser, String? id}) : id = id ?? const Uuid().v4();
+  final ParsedChartData? chartData;
+  _ChatMessage({required this.text, required this.isUser, String? id, this.chartData})
+    : id = id ?? const Uuid().v4();
 }
 
 class _TypingDot extends StatefulWidget {
@@ -660,7 +973,8 @@ class _TypingDot extends StatefulWidget {
   State<_TypingDot> createState() => _TypingDotState();
 }
 
-class _TypingDotState extends State<_TypingDot> with SingleTickerProviderStateMixin {
+class _TypingDotState extends State<_TypingDot>
+    with SingleTickerProviderStateMixin {
   late AnimationController _controller;
   late Animation<double> _anim;
 
@@ -671,9 +985,10 @@ class _TypingDotState extends State<_TypingDot> with SingleTickerProviderStateMi
       vsync: this,
       duration: const Duration(milliseconds: 600),
     );
-    _anim = Tween<double>(begin: 0, end: 1).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
-    );
+    _anim = Tween<double>(
+      begin: 0,
+      end: 1,
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeInOut));
     Future.delayed(Duration(milliseconds: widget.delay), () {
       if (mounted) _controller.repeat(reverse: true);
     });

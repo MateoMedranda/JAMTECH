@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../models/message_model.dart';
+import '../models/conversation_model.dart';
 import '../config/constants.dart';
 import 'api_service.dart';
 
@@ -27,9 +28,51 @@ class MessageService {
         }
       }
     } catch (e) {
-      //
+      print('Error getting chat messages: $e');
     }
     return [];
+  }
+
+  Future<List<Conversation>> getUserConversations(String userId) async {
+    try {
+      final uri = Uri.parse(
+        '${AppConstants.businessBotEndpoint}/conversations/$userId',
+      );
+
+      final headers = {'Content-Type': 'application/json'};
+      headers['Authorization'] = 'Bearer ${ApiService.authToken ?? 'demo123'}';
+
+      final response = await http.get(uri, headers: headers);
+
+      if (response.statusCode == 200) {
+        final Map<String, dynamic> data = jsonDecode(response.body);
+        final List convs = data['conversations'] ?? [];
+        return convs.map((json) => Conversation.fromJson(json)).toList();
+      }
+    } catch (e) {
+      print('Error getting user conversations: $e');
+    }
+    return [];
+  }
+
+  Future<bool> deleteConversation(String sessionId) async {
+    try {
+      final uri = Uri.parse(
+        '${AppConstants.businessBotEndpoint}/conversations/$sessionId',
+      );
+
+      final headers = {'Content-Type': 'application/json'};
+      headers['Authorization'] = 'Bearer ${ApiService.authToken ?? 'demo123'}';
+
+      final response = await http.delete(uri, headers: headers);
+
+      if (response.statusCode == 200) {
+        return true;
+      }
+    } catch (e) {
+      print('Error deleting conversation: $e');
+    }
+    return false;
   }
 
   Future<Message> sendMessage({

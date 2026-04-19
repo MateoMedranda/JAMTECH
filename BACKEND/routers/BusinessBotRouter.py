@@ -1,6 +1,6 @@
 import io
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, Response
 from pydantic import BaseModel
 from database.mongodb import get_db
 from services.BusinessBotService import BusinessBotService
@@ -67,7 +67,16 @@ class TTSRequest(BaseModel):
 async def tts_endpoint(request: TTSRequest, service: BusinessBotService = Depends(get_businessbot_service)):
     try:
         audio_bytes = await service.generate_tts_audio(request.text)
-        return StreamingResponse(io.BytesIO(audio_bytes), media_type="audio/mpeg")
+        return Response(content=audio_bytes, media_type="audio/mpeg")
+    except Exception as e:
+        print(f"Error en TTS: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/tts")
+async def tts_endpoint_get(text: str, service: BusinessBotService = Depends(get_businessbot_service)):
+    try:
+        audio_bytes = await service.generate_tts_audio(text)
+        return Response(content=audio_bytes, media_type="audio/mpeg")
     except Exception as e:
         print(f"Error en TTS: {e}")
         raise HTTPException(status_code=500, detail=str(e))
