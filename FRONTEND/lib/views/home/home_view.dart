@@ -32,10 +32,26 @@ class _HomeViewState extends State<HomeView> with TickerProviderStateMixin {
   ];
 
   final List<_NavItem> _navItems = [
-    _NavItem(icon: Icons.home_rounded, iconOutlined: Icons.home_outlined, label: 'Inicio'),
-    _NavItem(icon: Icons.point_of_sale_rounded, iconOutlined: Icons.point_of_sale_outlined, label: 'Mi Caja'),
-    _NavItem(icon: Icons.qr_code_rounded, iconOutlined: Icons.qr_code_outlined, label: 'Cobrar'),
-    _NavItem(icon: Icons.menu_rounded, iconOutlined: Icons.menu_outlined, label: 'Menú'),
+    _NavItem(
+      icon: Icons.home_rounded,
+      iconOutlined: Icons.home_outlined,
+      label: 'Inicio',
+    ),
+    _NavItem(
+      icon: Icons.point_of_sale_rounded,
+      iconOutlined: Icons.point_of_sale_outlined,
+      label: 'Mi Caja',
+    ),
+    _NavItem(
+      icon: Icons.qr_code_rounded,
+      iconOutlined: Icons.qr_code_outlined,
+      label: 'Cobrar',
+    ),
+    _NavItem(
+      icon: Icons.menu_rounded,
+      iconOutlined: Icons.menu_outlined,
+      label: 'Menú',
+    ),
   ];
 
   @override
@@ -57,7 +73,10 @@ class _HomeViewState extends State<HomeView> with TickerProviderStateMixin {
       vsync: this,
       duration: const Duration(milliseconds: 400),
     );
-    _fabScaleAnim = CurvedAnimation(parent: _fabController, curve: Curves.elasticOut);
+    _fabScaleAnim = CurvedAnimation(
+      parent: _fabController,
+      curve: Curves.elasticOut,
+    );
     _fabController.forward();
   }
 
@@ -92,10 +111,7 @@ class _HomeViewState extends State<HomeView> with TickerProviderStateMixin {
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: _buildAppBar(nombre, user),
-      body: IndexedStack(
-        index: _currentIndex,
-        children: _tabs,
-      ),
+      body: IndexedStack(index: _currentIndex, children: _tabs),
       floatingActionButton: _buildChatbotFab(context),
       floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
       bottomNavigationBar: _buildBottomNav(),
@@ -103,8 +119,14 @@ class _HomeViewState extends State<HomeView> with TickerProviderStateMixin {
   }
 
   PreferredSizeWidget _buildAppBar(String nombre, dynamic user) {
-    final initiales = user?.nombre != null && (user?.nombre as String).isNotEmpty
-        ? (user?.nombre as String).split(' ').map((p) => p.isNotEmpty ? p[0] : '').take(2).join().toUpperCase()
+    final initiales =
+        user?.nombre != null && (user?.nombre as String).isNotEmpty
+        ? (user?.nombre as String)
+              .split(' ')
+              .map((p) => p.isNotEmpty ? p[0] : '')
+              .take(2)
+              .join()
+              .toUpperCase()
         : 'U';
 
     return AppBar(
@@ -177,7 +199,11 @@ class _HomeViewState extends State<HomeView> with TickerProviderStateMixin {
           alignment: Alignment.center,
           children: [
             IconButton(
-              icon: const Icon(Icons.notifications_outlined, color: AppColors.textPrimary, size: 26),
+              icon: const Icon(
+                Icons.notifications_outlined,
+                color: AppColors.textPrimary,
+                size: 26,
+              ),
               onPressed: () {},
             ),
             Positioned(
@@ -196,17 +222,18 @@ class _HomeViewState extends State<HomeView> with TickerProviderStateMixin {
         ),
         // Soporte/headset
         IconButton(
-          icon: const Icon(Icons.headset_mic_outlined, color: AppColors.textPrimary, size: 24),
+          icon: const Icon(
+            Icons.headset_mic_outlined,
+            color: AppColors.textPrimary,
+            size: 24,
+          ),
           onPressed: () {},
         ),
         const SizedBox(width: 6),
       ],
       bottom: PreferredSize(
         preferredSize: const Size.fromHeight(1),
-        child: Container(
-          height: 0.5,
-          color: AppColors.divider,
-        ),
+        child: Container(height: 0.5, color: AppColors.divider),
       ),
     );
   }
@@ -217,10 +244,7 @@ class _HomeViewState extends State<HomeView> with TickerProviderStateMixin {
       child: AnimatedBuilder(
         animation: _pulseAnim,
         builder: (context, child) {
-          return Transform.scale(
-            scale: _pulseAnim.value,
-            child: child,
-          );
+          return Transform.scale(scale: _pulseAnim.value, child: child);
         },
         child: GestureDetector(
           onTap: () {
@@ -230,10 +254,16 @@ class _HomeViewState extends State<HomeView> with TickerProviderStateMixin {
                 pageBuilder: (_, __, ___) => const ChatbotView(),
                 transitionsBuilder: (_, anim, __, child) {
                   return SlideTransition(
-                    position: Tween<Offset>(
-                      begin: const Offset(0, 1),
-                      end: Offset.zero,
-                    ).animate(CurvedAnimation(parent: anim, curve: Curves.easeOutCubic)),
+                    position:
+                        Tween<Offset>(
+                          begin: const Offset(0, 1),
+                          end: Offset.zero,
+                        ).animate(
+                          CurvedAnimation(
+                            parent: anim,
+                            curve: Curves.easeOutCubic,
+                          ),
+                        ),
                     child: child,
                   );
                 },
@@ -257,15 +287,22 @@ class _HomeViewState extends State<HomeView> with TickerProviderStateMixin {
             ),
             child: Stack(
               children: [
-                const Center(
-                  child: Icon(Icons.smart_toy_rounded, color: Colors.white, size: 28),
+                Center(
+                  child: Image.asset(
+                    'assets/images/Lupita_Logo_burbuja.png',
+                    width: 28,
+                    height: 28,
+                  ),
                 ),
                 // Badge IA
                 Positioned(
                   top: 6,
                   right: 4,
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 5,
+                      vertical: 2,
+                    ),
                     decoration: BoxDecoration(
                       color: const Color(0xFF4ADE80),
                       borderRadius: BorderRadius.circular(8),
@@ -321,8 +358,8 @@ class _HomeViewState extends State<HomeView> with TickerProviderStateMixin {
                       color: isSelected && isCobrar
                           ? AppColors.primary
                           : isSelected
-                              ? AppColors.primarySurface
-                              : Colors.transparent,
+                          ? AppColors.primarySurface
+                          : Colors.transparent,
                       borderRadius: BorderRadius.circular(14),
                     ),
                     child: Column(
@@ -331,7 +368,9 @@ class _HomeViewState extends State<HomeView> with TickerProviderStateMixin {
                         Icon(
                           isSelected ? item.icon : item.iconOutlined,
                           color: isSelected
-                              ? isCobrar ? Colors.white : AppColors.primary
+                              ? isCobrar
+                                    ? Colors.white
+                                    : AppColors.primary
                               : AppColors.textSecondary,
                           size: 24,
                         ),
@@ -340,9 +379,13 @@ class _HomeViewState extends State<HomeView> with TickerProviderStateMixin {
                           item.label,
                           style: GoogleFonts.poppins(
                             fontSize: 10.5,
-                            fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                            fontWeight: isSelected
+                                ? FontWeight.w700
+                                : FontWeight.w500,
                             color: isSelected
-                                ? isCobrar ? Colors.white : AppColors.primary
+                                ? isCobrar
+                                      ? Colors.white
+                                      : AppColors.primary
                                 : AppColors.textSecondary,
                           ),
                         ),
