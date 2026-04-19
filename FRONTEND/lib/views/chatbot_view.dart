@@ -15,6 +15,7 @@ import '../models/conversation_model.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import '../widgets/chart_data_parser.dart';
 import '../widgets/chat_chart_widget.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 
 class ChatbotView extends StatefulWidget {
   const ChatbotView({super.key});
@@ -192,21 +193,44 @@ class _ChatbotViewState extends State<ChatbotView>
 
   Future<void> _toggleRecording() async {
     if (_isRecording) {
-      final path = await _audioRecorder.stop();
-      setState(() => _isRecording = false);
-      if (path != null) {
-        _sendAudioForSTT(path);
+      try {
+        final path = await _audioRecorder.stop();
+        setState(() => _isRecording = false);
+        if (path != null) {
+          _sendAudioForSTT(path);
+        }
+      } catch (e) {
+        setState(() => _isRecording = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error al detener grabación: $e')),
+        );
       }
     } else {
-      if (await _audioRecorder.hasPermission()) {
-        final tempDir = await getTemporaryDirectory();
-        final path =
-            '${tempDir.path}/audio_${DateTime.now().millisecondsSinceEpoch}.m4a';
-        await _audioRecorder.start(const RecordConfig(), path: path);
-        setState(() => _isRecording = true);
-      } else {
+      try {
+        if (await _audioRecorder.hasPermission()) {
+          if (kIsWeb) {
+            await _audioRecorder.start(
+              const RecordConfig(encoder: AudioEncoder.wav),
+              path: '', // Requerido por el compilador, pero ignorado en la Web
+            );
+          } else {
+            final tempDir = await getTemporaryDirectory();
+            final path = '${tempDir.path}/audio_${DateTime.now().millisecondsSinceEpoch}.wav';
+            await _audioRecorder.start(
+              const RecordConfig(encoder: AudioEncoder.wav),
+              path: path,
+            );
+          }
+          setState(() => _isRecording = true);
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Permiso de micrófono denegado.')),
+          );
+        }
+      } catch (e) {
+        print('Error al grabar: $e');
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Permiso de micrófono denegado.')),
+          SnackBar(content: Text('Error al iniciar micrófono: $e')),
         );
       }
     }
@@ -222,7 +246,7 @@ class _ChatbotViewState extends State<ChatbotView>
       
       if (path.startsWith('blob:')) {
         var audioResponse = await http.get(Uri.parse(path));
-        request.files.add(http.MultipartFile.fromBytes('file', audioResponse.bodyBytes, filename: 'audio.m4a'));
+        request.files.add(http.MultipartFile.fromBytes('file', audioResponse.bodyBytes, filename: 'audio.wav'));
       } else {
         request.files.add(await http.MultipartFile.fromPath('file', path));
       }

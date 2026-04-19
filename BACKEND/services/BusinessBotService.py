@@ -244,7 +244,7 @@ class BusinessBotService:
         if not api_key:
             raise Exception("ELEVENLABS_API_KEY no configurado")
         
-        voice_id = "JBFqnCBsd6RMkjVDRZzb" # George, voz garantizada para plan gratuito
+        voice_id = "hpp4J3VqNfWAUOO0d1Us" # Voz femenina elegida por el usuario
         url = f"https://api.elevenlabs.io/v1/text-to-speech/{voice_id}"
         headers = {
             "xi-api-key": api_key,
@@ -254,8 +254,8 @@ class BusinessBotService:
             "text": text,
             "model_id": "eleven_multilingual_v2",
             "voice_settings": {
-                "stability": 0.5,
-                "similarity_boost": 0.75
+                "stability": 0.35, # Más expresiva
+                "similarity_boost": 0.8
             }
         }
         

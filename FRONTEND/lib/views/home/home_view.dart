@@ -55,7 +55,10 @@ class _HomeViewState extends State<HomeView> with TickerProviderStateMixin {
       vsync: this,
       duration: const Duration(milliseconds: 400),
     );
-    _fabScaleAnim = CurvedAnimation(parent: _fabController, curve: Curves.elasticOut);
+    _fabScaleAnim = CurvedAnimation(
+      parent: _fabController,
+      curve: Curves.elasticOut,
+    );
     _fabController.forward();
   }
 
@@ -239,10 +242,7 @@ class _HomeViewState extends State<HomeView> with TickerProviderStateMixin {
       child: AnimatedBuilder(
         animation: _pulseAnim,
         builder: (context, child) {
-          return Transform.scale(
-            scale: _pulseAnim.value,
-            child: child,
-          );
+          return Transform.scale(scale: _pulseAnim.value, child: child);
         },
         child: GestureDetector(
           onPanUpdate: (details) {
@@ -261,10 +261,16 @@ class _HomeViewState extends State<HomeView> with TickerProviderStateMixin {
                 pageBuilder: (_, __, ___) => const ChatbotView(),
                 transitionsBuilder: (_, anim, __, child) {
                   return SlideTransition(
-                    position: Tween<Offset>(
-                      begin: const Offset(0, 1),
-                      end: Offset.zero,
-                    ).animate(CurvedAnimation(parent: anim, curve: Curves.easeOutCubic)),
+                    position:
+                        Tween<Offset>(
+                          begin: const Offset(0, 1),
+                          end: Offset.zero,
+                        ).animate(
+                          CurvedAnimation(
+                            parent: anim,
+                            curve: Curves.easeOutCubic,
+                          ),
+                        ),
                     child: child,
                   );
                 },
@@ -288,14 +294,21 @@ class _HomeViewState extends State<HomeView> with TickerProviderStateMixin {
             ),
             child: Stack(
               children: [
-                const Center(
-                  child: Icon(Icons.smart_toy_rounded, color: Colors.white, size: 28),
+                Center(
+                  child: Image.asset(
+                    'assets/images/Lupita_Logo_burbuja.png',
+                    width: 28,
+                    height: 28,
+                  ),
                 ),
                 Positioned(
                   top: 6,
                   right: 4,
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 5,
+                      vertical: 2,
+                    ),
                     decoration: BoxDecoration(
                       color: const Color(0xFF4ADE80),
                       borderRadius: BorderRadius.circular(8),
