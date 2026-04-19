@@ -51,9 +51,10 @@ def initialize_chatbot():
         return
 
     # ======= configuración del chat de groq, embeddings y base de datos vectorial ======
-    # Crear el LLM de Groq, modificar temperatura para regular creatividad, alternar modelos si es necesario
+    # llama-3.3-70b-versatile: único modelo de Groq confiable para tool-calling
+    # Usamos max_tokens=500 para reducir el consumo diario de tokens
     llm = ChatGroq(api_key=api_key,
-                   model="llama-3.3-70b-versatile", temperature=0.3)
+                   model="llama-3.3-70b-versatile", temperature=0.3, max_tokens=500)
     embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
 
     # Cargar o crear la base de datos vectorial con Chroma
@@ -75,13 +76,13 @@ def initialize_chatbot():
                                  persist_directory=PERSIST_DIRECTORY)
         else:
             text_splitter = RecursiveCharacterTextSplitter(
-                chunk_size=1000, chunk_overlap=200)
+                chunk_size=400, chunk_overlap=80)  # Chunks pequeños = menos tokens
             splits = text_splitter.split_documents(docs)
             vectorstore = Chroma.from_documents(
                 documents=splits, embedding=embeddings, persist_directory=PERSIST_DIRECTORY)
             print("✅ Documentos procesados.")
 
-    retriever = vectorstore.as_retriever(search_kwargs={"k": 2})
+    retriever = vectorstore.as_retriever(search_kwargs={"k": 1})  # 1 chunk = menos tokens
     retriever_tool = create_retriever_tool(
         retriever,
         "busqueda_base_conocimiento",
@@ -95,18 +96,15 @@ def initialize_chatbot():
         consultar_transacciones_recientes
     ]
 
+    # Prompt corto = menos tokens de sistema en cada llamada
     system_prompt = (
-        "El nombre del usuario es {user_name}. Siempre responde solo con el nombre no con el apellido. "
-        "La fecha actual es {current_date}. Usa esta fecha como referencia cuando el usuario pregunte por 'hoy', 'este mes' o 'este año'. "
-        "Eres un asistente experto en negocios, emprendimiento y análisis de datos empresariales. "
-        "Tu objetivo es ayudar al usuario a comprender el estado de su negocio usando datos precisos.\n"
-        "ID_COMERCIO ACTUAL: 'comercio_kevin_01'. "
-        "REGLAS CRÍTICAS DE USO DE HERRAMIENTAS:\n"
-        "1. NUNCA ejecutes herramientas de bases de datos (estadísticas, finanzas, clientes, transacciones) si el usuario solo está saludando, o preguntando '¿qué puedes hacer?', '¿qué información tienes?' o temas generales. En esos casos simplemente preséntate de forma amigable y respóndele en lenguaje natural.\n"
-        "2. Si el usuario hace preguntas generales de cómo funciona el negocio, métodos de pago, devoluciones, o conocimiento interno, utiliza la herramienta 'busqueda_base_conocimiento' para leer los manuales (txt).\n"
-        "3. SOLO ejecuta herramientas de MongoDB si el usuario pide explícitamente datos numéricos, reportes, tendencias de ventas o historial de transacciones de su negocio en particular.\n"
-        "4. Usa `calcular_resumen_financiero` para calcular ingresos netos, brutos y gastos totales del mes.\n"
-        "Sé claro, directo, y muestra los números exactos extraídos de las herramientas. Si no tienes datos, no inventes. "
+        "Usuario: {user_name}. Fecha: {current_date}. Comercio: 'comercio_kevin_01'.\n"
+        "Eres un asistente de negocios. Usa datos exactos de las herramientas.\n"
+        "REGLAS:\n"
+        "1. Si el usuario saluda o hace preguntas generales, responde de forma amigable SIN usar herramientas.\n"
+        "2. Para preguntas sobre el negocio/procedimientos, usa 'busqueda_base_conocimiento'.\n"
+        "3. Para datos numéricos/reportes/transacciones, usa las herramientas de MongoDB.\n"
+        "4. Nunca inventes datos. Sé directo y conciso."
     )
 
     agent_prompt = ChatPromptTemplate.from_messages(
@@ -228,15 +226,39 @@ class BusinessBotService:
         user_name = await self.get_user_name(user_id)
         current_date = datetime.now().strftime("%Y-%m-%d")
 
-        response = await conversational_rag_chain.ainvoke(
-            {
-                "input": message,
-                "user_name": user_name,
-                "current_date": current_date
-            },
-            config={"configurable": {"session_id": session_id}},
-        )
-        return {"content": response["output"]}
+        try:
+            response = await conversational_rag_chain.ainvoke(
+                {
+                    "input": message,
+                    "user_name": user_name,
+                    "current_date": current_date
+                },
+                config={"configurable": {"session_id": session_id}},
+            )
+            return {"content": response["output"]}
+        except Exception as e:
+            err_str = str(e)
+            # Si el modelo falló al intentar llamar una herramienta en un mensaje
+            # conversacional, reintentamos con el LLM directamente sin agente
+            if "Failed to call a function" in err_str or "failed_generation" in err_str:
+                print("⚠️ Tool-call fallido, reintentando como conversación directa...")
+                from langchain_groq import ChatGroq
+                from langchain_core.messages import HumanMessage, SystemMessage
+                fallback_llm = ChatGroq(
+                    api_key=GROQ_API_KEY,
+                    model="llama3-groq-8b-8192-tool-use-preview",
+                    temperature=0.3,
+                    max_tokens=600
+                )
+                # Recuperar historial reciente para contexto
+                history = get_session_history(session_id)
+                messages_history = history.messages[-6:] if len(history.messages) > 6 else history.messages
+                fallback_messages = [
+                    SystemMessage(content=f"Usuario: {user_name}. Fecha: {current_date}. Eres un asistente de negocios. Responde de forma directa y concisa en español.")
+                ] + messages_history + [HumanMessage(content=message)]
+                fallback_response = await fallback_llm.ainvoke(fallback_messages)
+                return {"content": fallback_response.content}
+            raise
 
     async def generate_tts_audio(self, text: str):
         import requests
