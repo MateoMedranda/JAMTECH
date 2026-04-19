@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <!--
+        Permite tráfico HTTP (no seguro) hacia IPs de red local.
+        Necesario para conectar con el backend en la misma red Wi-Fi.
+    -->
+    <domain-config cleartextTrafficPermitted="true">
+        <!-- Rango 192.168.x.x (Wi-Fi local típico) -->
+        <domain includeSubdomains="false">192.168.1.1</domain>
+        <domain includeSubdomains="false">192.168.43.1</domain>
+        <!-- Permite cualquier host local para desarrollo -->
+        <domain includeSubdomains="true">localhost</domain>
+        <domain includeSubdomains="false">10.0.2.2</domain>
+    </domain-config>
+    <!--
+        Permite HTTP hacia CUALQUIER destino para el audio TTS.
+        Útil si el backend cambia de IP. Puedes restringir luego.
+    -->
+    <base-config cleartextTrafficPermitted="true" />
+</network-security-config>

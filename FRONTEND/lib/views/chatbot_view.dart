@@ -13,6 +13,8 @@ import 'package:uuid/uuid.dart';
 import '../services/message_service.dart';
 import '../models/conversation_model.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
+import '../widgets/chart_data_parser.dart';
+import '../widgets/chat_chart_widget.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 
 class ChatbotView extends StatefulWidget {
@@ -78,8 +80,13 @@ class _ChatbotViewState extends State<ChatbotView>
         if (mounted) {
           setState(() {
             for (var msg in messages) {
+              final isUser = msg.type == 'human';
               _messages.add(
-                _ChatMessage(text: msg.content, isUser: msg.type == 'human'),
+                _ChatMessage(
+                  text: msg.content,
+                  isUser: isUser,
+                  chartData: isUser ? null : ChartDataParser.parse(msg.content),
+                ),
               );
             }
           });
@@ -105,8 +112,9 @@ class _ChatbotViewState extends State<ChatbotView>
   }
 
   void _addBotMessage(String text) {
+    final chartData = ChartDataParser.parse(text);
     setState(() {
-      _messages.add(_ChatMessage(text: text, isUser: false));
+      _messages.add(_ChatMessage(text: text, isUser: false, chartData: chartData));
     });
     _scrollToBottom();
   }
@@ -493,53 +501,61 @@ class _ChatbotViewState extends State<ChatbotView>
             const SizedBox(width: 8),
           ],
           Flexible(
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              decoration: BoxDecoration(
-                gradient: isUser
-                    ? const LinearGradient(
-                        colors: [AppColors.primaryLight, AppColors.primary],
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                      )
-                    : null,
-                color: isUser ? null : AppColors.white,
-                borderRadius: BorderRadius.only(
-                  topLeft: const Radius.circular(18),
-                  topRight: const Radius.circular(18),
-                  bottomLeft: Radius.circular(isUser ? 18 : 4),
-                  bottomRight: Radius.circular(isUser ? 4 : 18),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  decoration: BoxDecoration(
+                    gradient: isUser
+                        ? const LinearGradient(
+                            colors: [AppColors.primaryLight, AppColors.primary],
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                          )
+                        : null,
+                    color: isUser ? null : AppColors.white,
+                    borderRadius: BorderRadius.only(
+                      topLeft: const Radius.circular(18),
+                      topRight: const Radius.circular(18),
+                      bottomLeft: Radius.circular(isUser ? 18 : 4),
+                      bottomRight: Radius.circular(isUser ? 4 : 18),
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.05),
+                        blurRadius: 8,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                    border: isUser
+                        ? null
+                        : Border.all(color: AppColors.divider, width: 0.5),
+                  ),
+                  child: MarkdownBody(
+                    data: message.text,
+                    styleSheet: MarkdownStyleSheet(
+                      p: GoogleFonts.poppins(
+                        fontSize: 14,
+                        color: isUser ? Colors.white : AppColors.textPrimary,
+                        height: 1.5,
+                      ),
+                      listBullet: GoogleFonts.poppins(
+                        fontSize: 14,
+                        color: isUser ? Colors.white : AppColors.textPrimary,
+                      ),
+                      strong: GoogleFonts.poppins(
+                        fontSize: 14,
+                        color: isUser ? Colors.white : AppColors.primary,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
                 ),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.05),
-                    blurRadius: 8,
-                    offset: const Offset(0, 2),
-                  ),
-                ],
-                border: isUser
-                    ? null
-                    : Border.all(color: AppColors.divider, width: 0.5),
-              ),
-              child: MarkdownBody(
-                data: message.text,
-                styleSheet: MarkdownStyleSheet(
-                  p: GoogleFonts.poppins(
-                    fontSize: 14,
-                    color: isUser ? Colors.white : AppColors.textPrimary,
-                    height: 1.5,
-                  ),
-                  listBullet: GoogleFonts.poppins(
-                    fontSize: 14,
-                    color: isUser ? Colors.white : AppColors.textPrimary,
-                  ),
-                  strong: GoogleFonts.poppins(
-                    fontSize: 14,
-                    color: isUser ? Colors.white : AppColors.primary,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
+                // Gráfico interactivo (solo para mensajes del bot con datos)
+                if (!isUser && message.chartData != null)
+                  ChatChartWidget(data: message.chartData!),
+              ],
             ),
           ),
           if (!isUser) ...[
@@ -944,7 +960,8 @@ class _ChatMessage {
   final String id;
   final String text;
   final bool isUser;
-  _ChatMessage({required this.text, required this.isUser, String? id})
+  final ParsedChartData? chartData;
+  _ChatMessage({required this.text, required this.isUser, String? id, this.chartData})
     : id = id ?? const Uuid().v4();
 }
 
