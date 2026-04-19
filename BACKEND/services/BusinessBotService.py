@@ -15,6 +15,14 @@ import json
 from bson import ObjectId
 from config import GROQ_API_KEY, MONGO_URI, MONGO_DB
 
+from langchain_classic.agents import create_tool_calling_agent, AgentExecutor
+from langchain_core.tools import create_retriever_tool
+from services.bot_tools import (
+    calcular_resumen_financiero,
+    consultar_metricas_clientes,
+    consultar_transacciones_recientes
+)
+
 # configuración para obtener la base de datos vectorial y los datos del bot que son archivos de texto
 # OJO: los datos del bot son opcionales, el bot puede funcionar sin ellos pero se recomienda el uso de textos de negocio
 PERSIST_DIRECTORY = "./chroma_db"
@@ -73,63 +81,54 @@ def initialize_chatbot():
                 documents=splits, embedding=embeddings, persist_directory=PERSIST_DIRECTORY)
             print("✅ Documentos procesados.")
 
-    retriever = vectorstore.as_retriever()
-
-    # ======= configuración de prompts y cadenas de RAG ======
-    contextualize_q_system_prompt = (
-        "Given a chat history and the latest user question "
-        "which might reference context in the chat history, "
-        "formulate a standalone question which can be understood "
-        "without the chat history. Do NOT answer the question, "
-        "just reformulate it if needed and otherwise return it as is."
+    retriever = vectorstore.as_retriever(search_kwargs={"k": 2})
+    retriever_tool = create_retriever_tool(
+        retriever,
+        "busqueda_base_conocimiento",
+        "Busca en la base de conocimientos del negocio para responder dudas sobre procedimientos, historia de la empresa o reglas de negocio."
     )
+    
+    tools = [
+        retriever_tool,
+        calcular_resumen_financiero,
+        consultar_metricas_clientes,
+        consultar_transacciones_recientes
+    ]
 
-    # recuperación del contexto permitiendo tener memoria de chat
-    contextualize_q_prompt = ChatPromptTemplate.from_messages(
-        [
-            ("system", contextualize_q_system_prompt),
-            MessagesPlaceholder("chat_history"),
-            ("human", "{input}"),
-        ]
-    )
-
-    # prompt principal del bot con contexto de negocio
     system_prompt = (
         "El nombre del usuario es {user_name}. Siempre responde solo con el nombre no con el apellido. "
-        "Eres un asistente experto en negocios, emprendimiento y análisis del estado empresarial. "
-        "Tu objetivo es ayudar al usuario a comprender el estado de su negocio, estrategias, finanzas, y áreas de mejora. "
-        "\n\n"
-        "Debes hacer preguntas relevantes sobre la situación de su negocio si falta información, para darle las mejores recomendaciones. "
-        "Además, no redactes respuestas tan largas, solo responde con lo que sea necesario, siendo conciso y directo. "
-        "Utiliza los siguientes fragmentos de contexto recuperado (RAG) "
-        "para responder a la pregunta de negocio. Si no sabes, dilo, no inventes nada y que no haya redundancia, sé claro con las respuestas. "
-        "Compórtate como un asesor de negocios experto, pero si no sabes la respuesta, no inventes."
-        "\n\n"
-        "{context}"
+        "La fecha actual es {current_date}. Usa esta fecha como referencia cuando el usuario pregunte por 'hoy', 'este mes' o 'este año'. "
+        "Eres un asistente experto en negocios, emprendimiento y análisis de datos empresariales. "
+        "Tu objetivo es ayudar al usuario a comprender el estado de su negocio usando datos precisos.\n"
+        "ID_COMERCIO ACTUAL: 'comercio_kevin_01'. "
+        "REGLAS CRÍTICAS DE USO DE HERRAMIENTAS:\n"
+        "1. NUNCA ejecutes herramientas de bases de datos (estadísticas, finanzas, clientes, transacciones) si el usuario solo está saludando, o preguntando '¿qué puedes hacer?', '¿qué información tienes?' o temas generales. En esos casos simplemente preséntate de forma amigable y respóndele en lenguaje natural.\n"
+        "2. Si el usuario hace preguntas generales de cómo funciona el negocio, métodos de pago, devoluciones, o conocimiento interno, utiliza la herramienta 'busqueda_base_conocimiento' para leer los manuales (txt).\n"
+        "3. SOLO ejecuta herramientas de MongoDB si el usuario pide explícitamente datos numéricos, reportes, tendencias de ventas o historial de transacciones de su negocio en particular.\n"
+        "4. Usa `calcular_resumen_financiero` para calcular ingresos netos, brutos y gastos totales del mes.\n"
+        "Sé claro, directo, y muestra los números exactos extraídos de las herramientas. Si no tienes datos, no inventes. "
     )
 
-    # prompt de preguntas y respuestas con contexto
-    qa_prompt = ChatPromptTemplate.from_messages(
+    agent_prompt = ChatPromptTemplate.from_messages(
         [
             ("system", system_prompt),
             MessagesPlaceholder("chat_history"),
             ("human", "{input}"),
+            MessagesPlaceholder("agent_scratchpad"),
         ]
     )
 
-    history_aware_retriever = create_history_aware_retriever(
-        llm, retriever, contextualize_q_prompt)
-    question_answer_chain = create_stuff_documents_chain(llm, qa_prompt)
-    rag_chain = create_retrieval_chain(
-        history_aware_retriever, question_answer_chain)
+    agent = create_tool_calling_agent(llm, tools, agent_prompt)
+    agent_executor = AgentExecutor(agent=agent, tools=tools, verbose=True)
+
     conversational_rag_chain = RunnableWithMessageHistory(
-        rag_chain,
+        agent_executor,
         get_session_history,
         input_messages_key="input",
         history_messages_key="chat_history",
-        output_messages_key="answer",
+        output_messages_key="output",
     )
-    print("🤖 Business Bot listo.")
+    print("🤖 Business Bot listo (Agente ReAct).")
 
 
 class BusinessBotService:
@@ -227,15 +226,17 @@ class BusinessBotService:
             await self.update_conversation_timestamp(session_id)
         
         user_name = await self.get_user_name(user_id)
+        current_date = datetime.now().strftime("%Y-%m-%d")
 
-        response = conversational_rag_chain.invoke(
+        response = await conversational_rag_chain.ainvoke(
             {
                 "input": message,
-                "user_name": user_name
+                "user_name": user_name,
+                "current_date": current_date
             },
             config={"configurable": {"session_id": session_id}},
         )
-        return {"content": response["answer"]}
+        return {"content": response["output"]}
 
     async def generate_tts_audio(self, text: str):
         import requests

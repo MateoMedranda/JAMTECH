@@ -23,42 +23,25 @@ class _HomeViewState extends State<HomeView> with TickerProviderStateMixin {
   late Animation<double> _pulseAnim;
   late AnimationController _fabController;
   late Animation<double> _fabScaleAnim;
+  
+  Offset? _fabPosition;
 
-  final List<Widget> _tabs = [
-    const DashboardTab(),
+  final List<Widget> _bottomTabs = [
+    const _InicioView(),
     const MiCajaTab(),
-    const CobrarTab(),
     const MenuTab(),
   ];
 
   final List<_NavItem> _navItems = [
-    _NavItem(
-      icon: Icons.home_rounded,
-      iconOutlined: Icons.home_outlined,
-      label: 'Inicio',
-    ),
-    _NavItem(
-      icon: Icons.point_of_sale_rounded,
-      iconOutlined: Icons.point_of_sale_outlined,
-      label: 'Mi Caja',
-    ),
-    _NavItem(
-      icon: Icons.qr_code_rounded,
-      iconOutlined: Icons.qr_code_outlined,
-      label: 'Cobrar',
-    ),
-    _NavItem(
-      icon: Icons.menu_rounded,
-      iconOutlined: Icons.menu_outlined,
-      label: 'Menú',
-    ),
+    _NavItem(icon: Icons.home_rounded, iconOutlined: Icons.home_outlined, label: 'Inicio'),
+    _NavItem(icon: Icons.point_of_sale_rounded, iconOutlined: Icons.point_of_sale_outlined, label: 'Mi Caja'),
+    _NavItem(icon: Icons.menu_rounded, iconOutlined: Icons.menu_outlined, label: 'Menú'),
   ];
 
   @override
   void initState() {
     super.initState();
 
-    // Animación de pulso para el FAB chatbot
     _pulseController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 1600),
@@ -68,7 +51,6 @@ class _HomeViewState extends State<HomeView> with TickerProviderStateMixin {
       CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
     );
 
-    // Animación de escala del FAB al aparecer
     _fabController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 400),
@@ -94,8 +76,6 @@ class _HomeViewState extends State<HomeView> with TickerProviderStateMixin {
       case 1:
         return 'Mi Caja';
       case 2:
-        return 'Cobrar';
-      case 3:
         return 'Menú';
       default:
         return 'JAMTECH';
@@ -108,27 +88,38 @@ class _HomeViewState extends State<HomeView> with TickerProviderStateMixin {
     final user = authController.currentUser;
     final nombre = user?.nombre.split(' ').first ?? 'Usuario';
 
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      appBar: _buildAppBar(nombre, user),
-      body: IndexedStack(index: _currentIndex, children: _tabs),
-      floatingActionButton: _buildChatbotFab(context),
-      floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
-      bottomNavigationBar: _buildBottomNav(),
+    final screenSize = MediaQuery.of(context).size;
+    if (_fabPosition == null) {
+      _fabPosition = Offset(
+        screenSize.width - 80,
+        screenSize.height - 180,
+      );
+    }
+
+    return DefaultTabController(
+      length: 2,
+      child: Scaffold(
+        backgroundColor: AppColors.background,
+        appBar: _buildAppBar(nombre, user),
+        body: Stack(
+          children: [
+            IndexedStack(
+              index: _currentIndex,
+              children: _bottomTabs,
+            ),
+            Positioned(
+              left: _fabPosition!.dx,
+              top: _fabPosition!.dy,
+              child: _buildChatbotFab(context),
+            ),
+          ],
+        ),
+        bottomNavigationBar: _buildBottomNav(),
+      ),
     );
   }
 
   PreferredSizeWidget _buildAppBar(String nombre, dynamic user) {
-    final initiales =
-        user?.nombre != null && (user?.nombre as String).isNotEmpty
-        ? (user?.nombre as String)
-              .split(' ')
-              .map((p) => p.isNotEmpty ? p[0] : '')
-              .take(2)
-              .join()
-              .toUpperCase()
-        : 'U';
-
     return AppBar(
       backgroundColor: AppColors.white,
       elevation: 0,
@@ -139,47 +130,26 @@ class _HomeViewState extends State<HomeView> with TickerProviderStateMixin {
         child: _currentIndex == 0
             ? Row(
                 children: [
-                  // Avatar
                   Container(
-                    width: 42,
-                    height: 42,
-                    decoration: const BoxDecoration(
-                      gradient: AppColors.primaryGradient,
+                    width: 38,
+                    height: 38,
+                    decoration: BoxDecoration(
+                      color: AppColors.primarySurface,
                       shape: BoxShape.circle,
                     ),
-                    child: Center(
-                      child: Text(
-                        initiales,
-                        style: GoogleFonts.poppins(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w800,
-                          color: Colors.white,
-                        ),
-                      ),
+                    child: const Center(
+                      child: Icon(Icons.storefront_rounded, color: AppColors.primary, size: 20),
                     ),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Hola, $nombre 👋',
-                          style: GoogleFonts.poppins(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w700,
-                            color: AppColors.textPrimary,
-                          ),
-                        ),
-                        Text(
-                          'Admin • JAMTECH',
-                          style: GoogleFonts.poppins(
-                            fontSize: 12,
-                            color: AppColors.textSecondary,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ],
+                    child: Text(
+                      'Hola! $nombre',
+                      style: GoogleFonts.poppins(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.textPrimary,
+                      ),
                     ),
                   ),
                 ],
@@ -194,47 +164,75 @@ class _HomeViewState extends State<HomeView> with TickerProviderStateMixin {
               ),
       ),
       actions: [
-        // Notificaciones
-        Stack(
-          alignment: Alignment.center,
-          children: [
-            IconButton(
-              icon: const Icon(
-                Icons.notifications_outlined,
-                color: AppColors.textPrimary,
-                size: 26,
+        if (_currentIndex == 0) ...[
+          IconButton(
+            icon: const Icon(Icons.qr_code_scanner_rounded, color: AppColors.textPrimary, size: 24),
+            onPressed: () {},
+          ),
+          Stack(
+            alignment: Alignment.center,
+            children: [
+              IconButton(
+                icon: const Icon(Icons.notifications_none_rounded, color: AppColors.textPrimary, size: 26),
+                onPressed: () {},
               ),
-              onPressed: () {},
-            ),
-            Positioned(
-              top: 10,
-              right: 10,
-              child: Container(
-                width: 8,
-                height: 8,
-                decoration: const BoxDecoration(
-                  color: AppColors.error,
-                  shape: BoxShape.circle,
+              Positioned(
+                top: 10,
+                right: 10,
+                child: Container(
+                  width: 8,
+                  height: 8,
+                  decoration: const BoxDecoration(
+                    color: AppColors.error,
+                    shape: BoxShape.circle,
+                  ),
                 ),
               ),
-            ),
-          ],
-        ),
-        // Soporte/headset
-        IconButton(
-          icon: const Icon(
-            Icons.headset_mic_outlined,
-            color: AppColors.textPrimary,
-            size: 24,
+            ],
           ),
-          onPressed: () {},
-        ),
-        const SizedBox(width: 6),
+          IconButton(
+            icon: const Icon(Icons.headset_mic_outlined, color: AppColors.textPrimary, size: 24),
+            onPressed: () {},
+          ),
+          const SizedBox(width: 6),
+        ]
       ],
-      bottom: PreferredSize(
-        preferredSize: const Size.fromHeight(1),
-        child: Container(height: 0.5, color: AppColors.divider),
-      ),
+      bottom: _currentIndex == 0
+          ? PreferredSize(
+              preferredSize: const Size.fromHeight(48),
+              child: Container(
+                decoration: const BoxDecoration(
+                  border: Border(
+                    bottom: BorderSide(color: AppColors.divider, width: 1.5),
+                  ),
+                ),
+                child: TabBar(
+                  indicatorColor: AppColors.primary,
+                  indicatorWeight: 3,
+                  labelColor: AppColors.primary,
+                  unselectedLabelColor: AppColors.textSecondary,
+                  labelStyle: GoogleFonts.poppins(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                  ),
+                  unselectedLabelStyle: GoogleFonts.poppins(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                  ),
+                  tabs: const [
+                    Tab(text: 'Cobrar'),
+                    Tab(text: 'Gestionar'),
+                  ],
+                ),
+              ),
+            )
+          : PreferredSize(
+              preferredSize: const Size.fromHeight(1),
+              child: Container(
+                height: 0.5,
+                color: AppColors.divider,
+              ),
+            ),
     );
   }
 
@@ -247,6 +245,15 @@ class _HomeViewState extends State<HomeView> with TickerProviderStateMixin {
           return Transform.scale(scale: _pulseAnim.value, child: child);
         },
         child: GestureDetector(
+          onPanUpdate: (details) {
+            setState(() {
+              final screenSize = MediaQuery.of(context).size;
+              _fabPosition = Offset(
+                (_fabPosition!.dx + details.delta.dx).clamp(0.0, screenSize.width - 62.0),
+                (_fabPosition!.dy + details.delta.dy).clamp(0.0, screenSize.height - 180.0),
+              );
+            });
+          },
           onTap: () {
             Navigator.push(
               context,
@@ -294,7 +301,6 @@ class _HomeViewState extends State<HomeView> with TickerProviderStateMixin {
                     height: 28,
                   ),
                 ),
-                // Badge IA
                 Positioned(
                   top: 6,
                   right: 4,
@@ -329,75 +335,59 @@ class _HomeViewState extends State<HomeView> with TickerProviderStateMixin {
     return Container(
       decoration: BoxDecoration(
         color: AppColors.white,
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.08),
-            blurRadius: 16,
-            offset: const Offset(0, -4),
-          ),
-        ],
+        border: const Border(top: BorderSide(color: AppColors.divider, width: 0.5)),
       ),
       child: SafeArea(
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: _navItems.asMap().entries.map((entry) {
               final index = entry.key;
               final item = entry.value;
               final isSelected = _currentIndex == index;
-              final isCobrar = index == 2;
 
-              return Expanded(
-                child: GestureDetector(
-                  onTap: () => setState(() => _currentIndex = index),
-                  behavior: HitTestBehavior.opaque,
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 200),
-                    padding: const EdgeInsets.symmetric(vertical: 6),
-                    decoration: BoxDecoration(
-                      color: isSelected && isCobrar
-                          ? AppColors.primary
-                          : isSelected
-                          ? AppColors.primarySurface
-                          : Colors.transparent,
-                      borderRadius: BorderRadius.circular(14),
+              return GestureDetector(
+                onTap: () => setState(() => _currentIndex = index),
+                behavior: HitTestBehavior.opaque,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      isSelected ? item.icon : item.iconOutlined,
+                      color: isSelected ? AppColors.primary : AppColors.textSecondary,
+                      size: 26,
                     ),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          isSelected ? item.icon : item.iconOutlined,
-                          color: isSelected
-                              ? isCobrar
-                                    ? Colors.white
-                                    : AppColors.primary
-                              : AppColors.textSecondary,
-                          size: 24,
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          item.label,
-                          style: GoogleFonts.poppins(
-                            fontSize: 10.5,
-                            fontWeight: isSelected
-                                ? FontWeight.w700
-                                : FontWeight.w500,
-                            color: isSelected
-                                ? isCobrar
-                                      ? Colors.white
-                                      : AppColors.primary
-                                : AppColors.textSecondary,
-                          ),
-                        ),
-                      ],
+                    const SizedBox(height: 4),
+                    Text(
+                      item.label,
+                      style: GoogleFonts.poppins(
+                        fontSize: 11,
+                        fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
+                        color: isSelected ? AppColors.primary : AppColors.textSecondary,
+                      ),
                     ),
-                  ),
+                  ],
                 ),
               );
             }).toList(),
           ),
         ),
       ),
+    );
+  }
+}
+
+class _InicioView extends StatelessWidget {
+  const _InicioView();
+
+  @override
+  Widget build(BuildContext context) {
+    return const TabBarView(
+      children: [
+        CobrarTab(),
+        DashboardTab(),
+      ],
     );
   }
 }

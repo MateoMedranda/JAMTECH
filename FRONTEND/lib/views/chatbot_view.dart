@@ -11,6 +11,8 @@ import 'package:permission_handler/permission_handler.dart';
 import '../../config/constants.dart';
 import 'package:uuid/uuid.dart';
 import '../services/message_service.dart';
+import '../models/conversation_model.dart';
+import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 
 class ChatbotView extends StatefulWidget {
@@ -27,8 +29,10 @@ class _ChatbotViewState extends State<ChatbotView>
   final List<_ChatMessage> _messages = [];
   bool _isTyping = false;
   final MessageService _messageService = MessageService();
-  final String _sessionId = "1";
+  String _sessionId = const Uuid().v4();
   final String _userId = "1";
+  List<Conversation> _conversations = [];
+  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
 
   final AudioPlayer _audioPlayer = AudioPlayer();
   final AudioRecorder _audioRecorder = AudioRecorder();
@@ -39,6 +43,16 @@ class _ChatbotViewState extends State<ChatbotView>
   void initState() {
     super.initState();
     _loadChatHistory();
+    _loadUserConversations();
+  }
+
+  Future<void> _loadUserConversations() async {
+    final convs = await _messageService.getUserConversations(_userId);
+    if (mounted) {
+      setState(() {
+        _conversations = convs;
+      });
+    }
   }
 
   Future<void> _loadChatHistory() async {
@@ -135,6 +149,7 @@ class _ChatbotViewState extends State<ChatbotView>
       if (mounted) {
         setState(() => _isTyping = false);
         _addBotMessage(responseMsg.content);
+        _loadUserConversations(); // Actualizar el drawer
       }
     } catch (e) {
       if (mounted) {
@@ -260,7 +275,9 @@ class _ChatbotViewState extends State<ChatbotView>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      key: _scaffoldKey,
       backgroundColor: AppColors.background,
+      endDrawer: _buildHistoryDrawer(),
       appBar: PreferredSize(
         preferredSize: const Size.fromHeight(70),
         child: Container(
@@ -298,8 +315,8 @@ class _ChatbotViewState extends State<ChatbotView>
                     ),
                     child: Image.asset(
                       'assets/images/logo.png',
-                      width: 22,
-                      height: 22,
+                      width: 26,
+                      height: 26,
                       fit: BoxFit.contain,
                     ),
                   ),
@@ -322,17 +339,18 @@ class _ChatbotViewState extends State<ChatbotView>
                             Container(
                               width: 8,
                               height: 8,
-                              margin: const EdgeInsets.only(right: 5),
                               decoration: const BoxDecoration(
                                 color: Color(0xFF4ADE80),
                                 shape: BoxShape.circle,
                               ),
                             ),
+                            const SizedBox(width: 6),
                             Text(
                               'En línea',
                               style: GoogleFonts.poppins(
-                                color: Colors.white70,
+                                color: Colors.white.withOpacity(0.8),
                                 fontSize: 12,
+                                fontWeight: FontWeight.w500,
                               ),
                             ),
                           ],
@@ -359,6 +377,10 @@ class _ChatbotViewState extends State<ChatbotView>
                         fontSize: 12,
                       ),
                     ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.history_rounded, color: Colors.white),
+                    onPressed: () => _scaffoldKey.currentState?.openEndDrawer(),
                   ),
                   const SizedBox(width: 8),
                 ],
@@ -455,16 +477,16 @@ class _ChatbotViewState extends State<ChatbotView>
         children: [
           if (!isUser) ...[
             Container(
-              width: 32,
-              height: 32,
+              width: 38,
+              height: 38,
               decoration: const BoxDecoration(
                 gradient: AppColors.primaryGradient,
                 shape: BoxShape.circle,
               ),
               child: Image.asset(
                 'assets/images/logo.png',
-                width: 16,
-                height: 16,
+                width: 22,
+                height: 22,
                 fit: BoxFit.contain,
               ),
             ),
@@ -499,12 +521,23 @@ class _ChatbotViewState extends State<ChatbotView>
                     ? null
                     : Border.all(color: AppColors.divider, width: 0.5),
               ),
-              child: Text(
-                message.text,
-                style: GoogleFonts.poppins(
-                  fontSize: 14,
-                  color: isUser ? Colors.white : AppColors.textPrimary,
-                  height: 1.5,
+              child: MarkdownBody(
+                data: message.text,
+                styleSheet: MarkdownStyleSheet(
+                  p: GoogleFonts.poppins(
+                    fontSize: 14,
+                    color: isUser ? Colors.white : AppColors.textPrimary,
+                    height: 1.5,
+                  ),
+                  listBullet: GoogleFonts.poppins(
+                    fontSize: 14,
+                    color: isUser ? Colors.white : AppColors.textPrimary,
+                  ),
+                  strong: GoogleFonts.poppins(
+                    fontSize: 14,
+                    color: isUser ? Colors.white : AppColors.primary,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
               ),
             ),
@@ -576,16 +609,16 @@ class _ChatbotViewState extends State<ChatbotView>
       child: Row(
         children: [
           Container(
-            width: 32,
-            height: 32,
+            width: 38,
+            height: 38,
             decoration: const BoxDecoration(
               gradient: AppColors.primaryGradient,
               shape: BoxShape.circle,
             ),
             child: Image.asset(
               'assets/images/logo.png',
-              width: 16,
-              height: 16,
+              width: 22,
+              height: 22,
               fit: BoxFit.contain,
             ),
           ),
@@ -766,6 +799,140 @@ class _ChatbotViewState extends State<ChatbotView>
                 size: 20,
               ),
             ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildHistoryDrawer() {
+    return Drawer(
+      backgroundColor: AppColors.background,
+      child: SafeArea(
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Row(
+                children: [
+                  const Icon(Icons.history_rounded, color: AppColors.primary),
+                  const SizedBox(width: 12),
+                  Text(
+                    'Historial de Chats',
+                    style: GoogleFonts.poppins(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16.0),
+              child: ElevatedButton.icon(
+                onPressed: () {
+                  setState(() {
+                    _sessionId = const Uuid().v4();
+                    _messages.clear();
+                  });
+                  Navigator.pop(context); // close drawer
+                  _loadChatHistory();
+                },
+                icon: const Icon(Icons.add_rounded, color: Colors.white),
+                label: Text(
+                  'Nueva Conversación',
+                  style: GoogleFonts.poppins(
+                    fontWeight: FontWeight.w600,
+                    color: Colors.white,
+                  ),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primary,
+                  minimumSize: const Size(double.infinity, 48),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+              ),
+            ),
+            const Divider(height: 32),
+            Expanded(
+              child: _conversations.isEmpty
+                  ? Center(
+                      child: Text(
+                        'No hay conversaciones previas',
+                        style: GoogleFonts.poppins(color: AppColors.textSecondary),
+                      ),
+                    )
+                  : ListView.builder(
+                      itemCount: _conversations.length,
+                      itemBuilder: (context, index) {
+                        final conv = _conversations[index];
+                        return ListTile(
+                          leading: const Icon(Icons.chat_bubble_outline, color: AppColors.primary),
+                          title: Text(
+                            conv.title,
+                            style: GoogleFonts.poppins(
+                              fontWeight: FontWeight.w500,
+                              fontSize: 14,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          subtitle: Text(
+                            '${conv.updatedAt.day}/${conv.updatedAt.month}/${conv.updatedAt.year}',
+                            style: GoogleFonts.poppins(fontSize: 12),
+                          ),
+                          trailing: IconButton(
+                            icon: const Icon(Icons.delete_outline, color: AppColors.error),
+                            onPressed: () => _confirmDeleteConversation(conv.sessionId),
+                          ),
+                          onTap: () {
+                            setState(() {
+                              _sessionId = conv.sessionId;
+                              _messages.clear();
+                            });
+                            Navigator.pop(context);
+                            _loadChatHistory();
+                          },
+                        );
+                      },
+                    ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _confirmDeleteConversation(String sessionId) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Eliminar Chat', style: GoogleFonts.poppins(fontWeight: FontWeight.bold)),
+        content: Text('¿Estás seguro de que deseas eliminar este chat?', style: GoogleFonts.poppins()),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text('Cancelar', style: GoogleFonts.poppins(color: AppColors.textSecondary)),
+          ),
+          TextButton(
+            onPressed: () async {
+              Navigator.pop(ctx);
+              final success = await _messageService.deleteConversation(sessionId);
+              if (success) {
+                if (_sessionId == sessionId) {
+                  setState(() {
+                    _sessionId = const Uuid().v4();
+                    _messages.clear();
+                  });
+                  _loadChatHistory();
+                }
+                _loadUserConversations();
+              }
+            },
+            child: Text('Eliminar', style: GoogleFonts.poppins(color: AppColors.error, fontWeight: FontWeight.bold)),
           ),
         ],
       ),
