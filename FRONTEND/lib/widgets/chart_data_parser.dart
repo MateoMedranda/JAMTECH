@@ -39,6 +39,8 @@ class ChartDataParser {
     final clean = text
         .replaceAll(RegExp(r'\*\*([^*]+)\*\*'), r'\1')
         .replaceAll(RegExp(r'\*([^*]+)\*'), r'\1')
+        .replaceAllMapped(RegExp(r'@(?:G|L)\(([^)]+)\)@'), (m) => m.group(1)!) // Extraer número de etiquetas de color
+        .replaceAll(RegExp(r'###[GL]###'), '') // Por si quedaron rastros antiguos
         .replaceAll(RegExp(r'#{1,6}\s*'), '')
         .replaceAll(RegExp(r'`[^`]*`'), '');
 

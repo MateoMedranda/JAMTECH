@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../config/theme/app_colors.dart';
+import 'dart:math';
 import 'dart:convert';
 import 'dart:io';
 import 'package:http/http.dart' as http;
@@ -15,6 +16,7 @@ import '../models/conversation_model.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import '../widgets/chart_data_parser.dart';
 import '../widgets/chat_chart_widget.dart';
+import 'package:markdown/markdown.dart' as md;
 import 'package:flutter/foundation.dart' show kIsWeb;
 
 class ChatbotView extends StatefulWidget {
@@ -41,6 +43,56 @@ class _ChatbotViewState extends State<ChatbotView>
   bool _isRecording = false;
   String? _currentlyPlayingId;
 
+  // Categorías de sugerencias dinámicas
+  final Map<String, List<String>> _suggestionCategories = {
+    'ventas': [
+      '¿Cuánto vendí esta semana?',
+      '¿Cómo me fue este mes comparado con el mes pasado?',
+      '¿Cuánto llevo vendido este año?',
+      '¿Cuál fue mi mejor mes del año?',
+      '¿Voy a llegar a \$5,000 este mes?',
+      'Muéstrame una gráfica de mis ventas',
+    ],
+    'tiempo': [
+      '¿Cuál es mi mejor día de la semana?',
+      '¿Cuál es mi peor día?',
+      '¿A qué hora vendo más?',
+      '¿Por qué los viernes vendo menos?',
+      'Gráfica de mis ventas por hora',
+    ],
+    'clientes': [
+      '¿Cuántos clientes tuve esta semana?',
+      '¿Cuántos clientes nuevos tuve este mes?',
+      '¿Qué clientes no han vuelto?',
+      '¿Mis clientes frecuentes siguen viniendo?',
+      '¿Cuánto me gasta en promedio cada cliente?',
+    ],
+    'tendencias': [
+      '¿Estoy vendiendo más o menos que antes?',
+      '¿Hubo algo raro esta semana?',
+      '¿Cuál fue mi día más exitoso de todo el año?',
+      '¿Cuándo fue la última vez que vendí más de \$500 en un día?',
+      'Muéstrame una gráfica de mis ventas',
+    ],
+    'negocio': [
+      '¿Cuánto me quedó limpio este mes?',
+      '¿Gané o perdí comparado con el mes pasado?',
+      '¿Estoy gastando bien en mercadería?',
+      '¿Cuánto necesito vender para no perder?',
+      '¿En qué estoy gastando más de lo que debería?',
+      '¿Qué puedo hacer para ganar más sin vender más?',
+      '¿Qué día debería hacer una promoción?',
+      '¿Cómo puedo vender más?',
+    ],
+  };
+
+  final List<String> _initialSuggestions = [
+    '¿Cómo cobrar?',
+    'Ver mi saldo',
+    'Historial de pagos',
+    'Soporte',
+  ];
+
   @override
   void initState() {
     super.initState();
@@ -66,7 +118,7 @@ class _ChatbotViewState extends State<ChatbotView>
         if (mounted) {
           Future.delayed(const Duration(milliseconds: 400), () {
             _addBotMessage(
-              '¡Hola! 👋 Soy **Lupita**, tu asistente de **JAMTECH**.\n\n'
+              '¡Hola Kevin! 👋 Soy **Lupita**, tu asistente de **JAMTECH**.\n\n'
               'Puedo ayudarte con:\n'
               '• Consultas sobre transacciones\n'
               '• Soporte para cobros y pagos\n'
@@ -96,7 +148,7 @@ class _ChatbotViewState extends State<ChatbotView>
     } catch (e) {
       if (mounted) {
         _addBotMessage(
-          "¡Hola! Soy Lupita, tu asistente de JAMTECH. ¿En qué puedo ayudarte?",
+          "¡Hola Kevin! Soy Lupita, tu asistente de JAMTECH. ¿En qué puedo ayudarte?",
         );
       }
     }
@@ -113,10 +165,43 @@ class _ChatbotViewState extends State<ChatbotView>
 
   void _addBotMessage(String text) {
     final chartData = ChartDataParser.parse(text);
+    final processedText = _processNumericContext(text);
     setState(() {
-      _messages.add(_ChatMessage(text: text, isUser: false, chartData: chartData));
+      _messages.add(_ChatMessage(text: processedText, isUser: false, chartData: chartData));
     });
     _scrollToBottom();
+  }
+
+  String _processNumericContext(String text) {
+    final gainKeywords = ['ingreso', 'ganancia', 'ahorro', 'recibido', 'venta', 'vendi', 'vendí', 'exito', 'éxito', 'subio', 'subió', 'ganaste', 'positivo', 'mejorado', 'incremento'];
+    final lossKeywords = ['gasto', 'perdida', 'pérdida', 'pago', 'pagado', 'deuda', 'perdi', 'perdí', 'bajo', 'bajó', 'perdiste', 'negativo', 'menos', 'disminución', 'reducción'];
+
+    // Regex mejorada: opcionalmente inicia con - o +, opcional $, luego dígitos y decimales
+    // Usamos límites que permiten signos pero evitan pegar números a otros dígitos (como fechas)
+    return text.replaceAllMapped(RegExp(r'(?<![\d])([-+]?\$?\d+(?:[.,]\d+)?)(?![\d])'), (match) {
+      final numStr = match.group(0)!;
+      final index = match.start;
+      
+      // Si el número parece una fecha o parte de ella (ej: 2024-10-12), no lo resaltamos
+      // El regex ya captura el guión si está al inicio, pero si está en medio de dígitos no.
+      if (RegExp(r'^\d{2,4}-\d{2}-\d{2}$').hasMatch(numStr)) return numStr;
+
+      // Ignorar números que parecen índices de lista (ej: "1. ", "2. ")
+      if (text.substring(index + numStr.length).startsWith('. ')) return numStr;
+      
+      // Ignorar números aislados muy cortos sin contexto de moneda
+      if (!numStr.contains('\$') && numStr.length < 2) return numStr;
+
+      final start = (index - 60).clamp(0, text.length);
+      final contextText = text.substring(start, index).toLowerCase();
+      
+      bool isLoss = numStr.startsWith('-') || lossKeywords.any((k) => contextText.contains(k));
+      bool isGain = (numStr.startsWith('+') || gainKeywords.any((k) => contextText.contains(k))) && !numStr.startsWith('-');
+      
+      if (isGain) return '@G($numStr)@'; 
+      if (isLoss) return '@L($numStr)@';
+      return '**$numStr**';
+    });
   }
 
   void _addUserMessage(String text) {
@@ -421,7 +506,7 @@ class _ChatbotViewState extends State<ChatbotView>
           ),
 
           // ── Sugerencias rápidas ───────────────────────────────────────
-          if (_messages.length <= 1) _buildQuickSuggestions(),
+          if (_messages.isNotEmpty && !_messages.last.isUser) _buildQuickSuggestions(),
 
           // ── Input de mensaje ──────────────────────────────────────────
           _buildInputBar(),
@@ -534,6 +619,17 @@ class _ChatbotViewState extends State<ChatbotView>
                   ),
                   child: MarkdownBody(
                     data: message.text,
+                    extensionSet: md.ExtensionSet(
+                      md.ExtensionSet.gitHubFlavored.blockSyntaxes,
+                      [
+                        ...md.ExtensionSet.gitHubFlavored.inlineSyntaxes,
+                        ColorAmountSyntax(),
+                      ],
+                    ),
+                    builders: {
+                      'amount_G': ColorAmountBuilder(const Color(0xFF10B981)),
+                      'amount_L': ColorAmountBuilder(const Color(0xFFEF4444)),
+                    },
                     styleSheet: MarkdownStyleSheet(
                       p: GoogleFonts.poppins(
                         fontSize: 14,
@@ -599,19 +695,36 @@ class _ChatbotViewState extends State<ChatbotView>
           ],
           if (isUser) ...[
             const SizedBox(width: 8),
-            Container(
-              width: 32,
-              height: 32,
-              decoration: BoxDecoration(
-                color: AppColors.primarySurface,
-                shape: BoxShape.circle,
-                border: Border.all(color: AppColors.primary.withOpacity(0.2)),
-              ),
-              child: const Icon(
-                Icons.person,
-                color: AppColors.primary,
-                size: 16,
-              ),
+            Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 36,
+                  height: 36,
+                  decoration: const BoxDecoration(
+                    gradient: AppColors.primaryGradient,
+                    shape: BoxShape.circle,
+                  ),
+                  alignment: Alignment.center,
+                  child: Text(
+                    'K',
+                    style: GoogleFonts.poppins(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w800,
+                      fontSize: 16,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Kevin',
+                  style: GoogleFonts.poppins(
+                    color: AppColors.textSecondary,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ],
             ),
           ],
         ],
@@ -667,17 +780,53 @@ class _ChatbotViewState extends State<ChatbotView>
     );
   }
 
+  List<String> _getDynamicSuggestions() {
+    if (_messages.isEmpty) return _initialSuggestions;
+
+    // Obtener el texto del último mensaje (del bot o usuario)
+    final lastText = _messages.last.text.toLowerCase();
+    
+    String category = 'general';
+    
+    // Detección simple de palabras clave
+    if (lastText.contains('vendi') || lastText.contains('venta') || lastText.contains('ingreso') || lastText.contains('dinero') || lastText.contains('resumen')) {
+      category = 'ventas';
+    } else if (lastText.contains('hora') || lastText.contains('dia') || lastText.contains('lunes') || lastText.contains('viernes') || lastText.contains('semana')) {
+      category = 'tiempo';
+    } else if (lastText.contains('cliente') || lastText.contains('persona') || lastText.contains('frecuente')) {
+      category = 'clientes';
+    } else if (lastText.contains('mas') || lastText.contains('menos') || lastText.contains('raro') || lastText.contains('tendencia')) {
+      category = 'tendencias';
+    } else if (lastText.contains('gasto') || lastText.contains('perdi') || lastText.contains('gane') || lastText.contains('limpio') || lastText.contains('promocion')) {
+      category = 'negocio';
+    }
+
+    List<String> pool = [];
+    if (category == 'general') {
+      // Si no hay contexto claro, mezclar una de cada categoría
+      pool = [
+        _suggestionCategories['ventas']![Random().nextInt(_suggestionCategories['ventas']!.length)],
+        _suggestionCategories['clientes']![Random().nextInt(_suggestionCategories['clientes']!.length)],
+        _suggestionCategories['negocio']![Random().nextInt(_suggestionCategories['negocio']!.length)],
+        _initialSuggestions[Random().nextInt(_initialSuggestions.length)],
+      ];
+    } else {
+      // Tomar 3 de la categoría detectada y 1 general
+      final catList = List<String>.from(_suggestionCategories[category]!);
+      catList.shuffle();
+      pool = catList.take(3).toList();
+      pool.add(_initialSuggestions[Random().nextInt(_initialSuggestions.length)]);
+    }
+
+    return pool;
+  }
+
   Widget _buildQuickSuggestions() {
-    final suggestions = [
-      '¿Cómo cobrar?',
-      'Ver mi saldo',
-      'Historial de pagos',
-      'Soporte',
-    ];
+    final suggestions = _getDynamicSuggestions();
 
     return Container(
-      height: 44,
-      margin: const EdgeInsets.only(bottom: 8),
+      height: 48,
+      margin: const EdgeInsets.only(bottom: 12, top: 4),
       child: ListView.builder(
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -689,19 +838,27 @@ class _ChatbotViewState extends State<ChatbotView>
               _sendMessage();
             },
             child: Container(
-              margin: const EdgeInsets.only(right: 10),
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              margin: const EdgeInsets.only(right: 12),
+              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 0),
+              alignment: Alignment.center,
               decoration: BoxDecoration(
-                color: AppColors.primarySurface,
-                borderRadius: BorderRadius.circular(22),
-                border: Border.all(color: AppColors.primary.withOpacity(0.3)),
+                color: AppColors.white,
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(color: AppColors.primary.withOpacity(0.15)),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.03),
+                    blurRadius: 4,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
               ),
               child: Text(
                 suggestions[index],
                 style: GoogleFonts.poppins(
                   fontSize: 13,
                   color: AppColors.primary,
-                  fontWeight: FontWeight.w500,
+                  fontWeight: FontWeight.w600,
                 ),
               ),
             ),
@@ -1013,5 +1170,34 @@ class _TypingDotState extends State<_TypingDot>
         ),
       ),
     );
+  }
+}
+
+class ColorAmountBuilder extends MarkdownElementBuilder {
+  final Color color;
+  ColorAmountBuilder(this.color);
+
+  @override
+  Widget? visitElementAfter(md.Element element, TextStyle? preferredStyle) {
+    return Text(
+      element.textContent,
+      style: preferredStyle?.copyWith(
+        color: color,
+        fontWeight: FontWeight.w800,
+      ),
+    );
+  }
+}
+
+class ColorAmountSyntax extends md.InlineSyntax {
+  ColorAmountSyntax() : super(r'@(G|L)\(([^)]+)\)@');
+
+  @override
+  bool onMatch(md.InlineParser parser, Match match) {
+    final type = match.group(1); // G o L
+    final text = match.group(2); // El número
+    final element = md.Element.text('amount_$type', text!);
+    parser.addNode(element);
+    return true;
   }
 }

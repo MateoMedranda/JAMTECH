@@ -105,7 +105,8 @@ def initialize_chatbot():
         "1. Si el usuario saluda o hace preguntas generales, responde de forma amigable SIN usar herramientas.\n"
         "2. Para preguntas sobre el negocio/procedimientos, usa 'busqueda_base_conocimiento'.\n"
         "3. Para datos numéricos/reportes/transacciones, usa las herramientas de MongoDB.\n"
-        "4. Nunca inventes datos. Sé directo y conciso."
+        "4. Nunca inventes datos. Sé directo y conciso.\n"
+        "5. Tienes la capacidad de generar gráficas. Si el usuario pide una gráfica o resumen visual, usa las herramientas de datos y presenta los resultados SIEMPRE en una tabla Markdown (con columnas como 'Categoría' y 'Monto') para que el sistema pueda renderizar el gráfico automáticamente."
     )
 
     agent_prompt = ChatPromptTemplate.from_messages(
@@ -197,21 +198,23 @@ class BusinessBotService:
         return messages
 
     async def get_user_name(self, user_id: str):
+        if user_id == "1":
+            return "Kevin"
         # user_id puede ser un email o un ObjectId
         try:
             user = await self.db.usuarios.find_one({"_id": ObjectId(user_id)})
             if user:
-                return user.get("nombre", "Usuario")
+                return user.get("nombre", "Kevin")
         except:
             pass
         
         # Si no es un ObjectId válido, buscar por email
         user = await self.db.usuarios.find_one({"email": user_id})
         if user:
-            return user.get("nombre", "Usuario")
+            return user.get("nombre", "Kevin")
         
-        # Si no encuentra, retornar el email como nombre
-        return user_id.split('@')[0] if '@' in user_id else "Usuario"
+        # Si no encuentra, retornar Kevin por defecto para esta demo
+        return "Kevin"
 
     async def chat_with_bot(self, message: str, session_id: str, user_id: str):
         global conversational_rag_chain
