@@ -64,7 +64,7 @@ class _ChatbotViewState extends State<ChatbotView>
         if (mounted) {
           Future.delayed(const Duration(milliseconds: 400), () {
             _addBotMessage(
-              '¡Hola! 👋 Soy el asistente virtual de **JAMTECH**.\n\n'
+              '¡Hola! 👋 Soy **Lupita**, tu asistente de **JAMTECH**.\n\n'
               'Puedo ayudarte con:\n'
               '• Consultas sobre transacciones\n'
               '• Soporte para cobros y pagos\n'
@@ -89,7 +89,7 @@ class _ChatbotViewState extends State<ChatbotView>
     } catch (e) {
       if (mounted) {
         _addBotMessage(
-          "¡Hola! Soy el asistente virtual. ¿En qué puedo ayudarte?",
+          "¡Hola! Soy Lupita, tu asistente de JAMTECH. ¿En qué puedo ayudarte?",
         );
       }
     }
@@ -327,7 +327,7 @@ class _ChatbotViewState extends State<ChatbotView>
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         Text(
-                          'Asistente JAMTECH',
+                          'Lupita',
                           style: GoogleFonts.poppins(
                             color: Colors.white,
                             fontWeight: FontWeight.w700,
@@ -452,7 +452,7 @@ class _ChatbotViewState extends State<ChatbotView>
           ),
           const SizedBox(height: 16),
           Text(
-            'Asistente IA',
+            'Lupita',
             style: GoogleFonts.poppins(
               fontSize: 20,
               fontWeight: FontWeight.bold,

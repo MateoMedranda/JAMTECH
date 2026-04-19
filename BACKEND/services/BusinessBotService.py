@@ -1,4 +1,5 @@
 import os
+import re
 from langchain_groq import ChatGroq
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_chroma import Chroma
@@ -238,6 +239,62 @@ class BusinessBotService:
         )
         return {"content": response["output"]}
 
+    def _preparar_texto_tts(self, texto: str) -> str:
+        """Preprocesa el texto para mejorar la pronunciación en TTS."""
+        from num2words import num2words
+        
+        # Eliminar markdown que no se debe leer
+        texto = re.sub(r'\*\*(.*?)\*\*', r'\1', texto)
+        texto = re.sub(r'\*(.*?)\*', r'\1', texto)
+        texto = re.sub(r'#+\s*', '', texto)
+        texto = re.sub(r'`(.*?)`', r'\1', texto)
+        
+        # Convertir fechas YYYY-MM-DD a formato legible ANTES de convertir números
+        def fecha_a_palabras(m):
+            meses = {
+                '01': 'enero', '02': 'febrero', '03': 'marzo', '04': 'abril',
+                '05': 'mayo', '06': 'junio', '07': 'julio', '08': 'agosto',
+                '09': 'septiembre', '10': 'octubre', '11': 'noviembre', '12': 'diciembre'
+            }
+            anio, mes, dia = m.group(1), m.group(2), m.group(3)
+            return f"{int(dia)} de {meses.get(mes, mes)} de {anio}"
+        
+        texto = re.sub(r'(\d{4})-(\d{2})-(\d{2})', fecha_a_palabras, texto)
+        
+        # Convertir montos con $ a palabras ANTES de convertir números genéricos
+        def monto_a_palabras(m):
+            valor = m.group(1)
+            if '.' in valor:
+                entero, decimal = valor.split('.')
+                palabra_entero = num2words(int(entero), lang='es')
+                palabra_decimal = num2words(int(decimal), lang='es')
+                return f"{palabra_entero} dólares con {palabra_decimal} centavos"
+            return f"{num2words(int(valor), lang='es')} dólares"
+        
+        texto = re.sub(r'\$([\d]+(?:\.\d{1,2})?)', monto_a_palabras, texto)
+        
+        # Convertir todos los números restantes (enteros y decimales) a palabras en español
+        def numero_a_palabras(m):
+            num_str = m.group(0)
+            try:
+                if '.' in num_str:
+                    return num2words(float(num_str), lang='es')
+                else:
+                    return num2words(int(num_str), lang='es')
+            except Exception:
+                return num_str
+        
+        texto = re.sub(r'\b\d+(?:\.\d+)?\b', numero_a_palabras, texto)
+        
+        # Limpiar viñetas y puntos de lista
+        texto = re.sub(r'^[\u2022\-\*]\s+', '', texto, flags=re.MULTILINE)
+        
+        # Reducir múltiples espacios y saltos de línea
+        texto = re.sub(r'\n+', '. ', texto)
+        texto = re.sub(r'\s+', ' ', texto).strip()
+        
+        return texto
+
     async def generate_tts_audio(self, text: str):
         import requests
         api_key = os.environ.get("ELEVENLABS_API_KEY")
@@ -250,6 +307,7 @@ class BusinessBotService:
             "xi-api-key": api_key,
             "Content-Type": "application/json"
         }
+        text = self._preparar_texto_tts(text)
         data = {
             "text": text,
             "model_id": "eleven_multilingual_v2",

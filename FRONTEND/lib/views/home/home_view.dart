@@ -88,31 +88,46 @@ class _HomeViewState extends State<HomeView> with TickerProviderStateMixin {
     final user = authController.currentUser;
     final nombre = user?.nombre.split(' ').first ?? 'Usuario';
 
-    final screenSize = MediaQuery.of(context).size;
-    if (_fabPosition == null) {
-      _fabPosition = Offset(
-        screenSize.width - 80,
-        screenSize.height - 180,
-      );
-    }
-
     return DefaultTabController(
       length: 2,
       child: Scaffold(
         backgroundColor: AppColors.background,
         appBar: _buildAppBar(nombre, user),
-        body: Stack(
-          children: [
-            IndexedStack(
-              index: _currentIndex,
-              children: _bottomTabs,
-            ),
-            Positioned(
-              left: _fabPosition!.dx,
-              top: _fabPosition!.dy,
-              child: _buildChatbotFab(context),
-            ),
-          ],
+        body: LayoutBuilder(
+          builder: (context, constraints) {
+            final bodyWidth = constraints.maxWidth;
+            final bodyHeight = constraints.maxHeight;
+            const fabSize = 88.0;
+            const margin = 16.0;
+
+            final maxX = (bodyWidth - fabSize).clamp(0.0, double.infinity);
+            final maxY = (bodyHeight - fabSize - margin).clamp(0.0, double.infinity);
+
+            // Inicializar posición solo una vez, en la esquina inferior derecha
+            if (_fabPosition == null) {
+              _fabPosition = Offset(maxX - margin, maxY);
+            } else {
+              // Re-ajustar si la pantalla cambia de tamaño
+              _fabPosition = Offset(
+                _fabPosition!.dx.clamp(0.0, maxX),
+                _fabPosition!.dy.clamp(0.0, maxY),
+              );
+            }
+
+            return Stack(
+              children: [
+                IndexedStack(
+                  index: _currentIndex,
+                  children: _bottomTabs,
+                ),
+                Positioned(
+                  left: _fabPosition!.dx,
+                  top: _fabPosition!.dy,
+                  child: _buildChatbotFab(context, maxX: maxX, maxY: maxY),
+                ),
+              ],
+            );
+          },
         ),
         bottomNavigationBar: _buildBottomNav(),
       ),
@@ -236,7 +251,7 @@ class _HomeViewState extends State<HomeView> with TickerProviderStateMixin {
     );
   }
 
-  Widget _buildChatbotFab(BuildContext context) {
+  Widget _buildChatbotFab(BuildContext context, {required double maxX, required double maxY}) {
     return ScaleTransition(
       scale: _fabScaleAnim,
       child: AnimatedBuilder(
@@ -247,10 +262,9 @@ class _HomeViewState extends State<HomeView> with TickerProviderStateMixin {
         child: GestureDetector(
           onPanUpdate: (details) {
             setState(() {
-              final screenSize = MediaQuery.of(context).size;
               _fabPosition = Offset(
-                (_fabPosition!.dx + details.delta.dx).clamp(0.0, screenSize.width - 62.0),
-                (_fabPosition!.dy + details.delta.dy).clamp(0.0, screenSize.height - 180.0),
+                (_fabPosition!.dx + details.delta.dx).clamp(0.0, maxX),
+                (_fabPosition!.dy + details.delta.dy).clamp(0.0, maxY),
               );
             });
           },
@@ -278,36 +292,25 @@ class _HomeViewState extends State<HomeView> with TickerProviderStateMixin {
             );
           },
           child: Container(
-            width: 62,
-            height: 62,
-            decoration: BoxDecoration(
-              gradient: AppColors.chatbotGradient,
-              shape: BoxShape.circle,
-              boxShadow: [
-                BoxShadow(
-                  color: AppColors.primary.withOpacity(0.45),
-                  blurRadius: 18,
-                  spreadRadius: 2,
-                  offset: const Offset(0, 6),
-                ),
-              ],
-            ),
+            width: 88,
+            height: 88,
             child: Stack(
               children: [
                 Center(
                   child: Image.asset(
                     'assets/images/Lupita_Logo_burbuja.png',
-                    width: 28,
-                    height: 28,
+                    width: 88,
+                    height: 88,
+                    fit: BoxFit.contain,
                   ),
                 ),
                 Positioned(
-                  top: 6,
-                  right: 4,
+                  top: 4,
+                  right: 2,
                   child: Container(
                     padding: const EdgeInsets.symmetric(
-                      horizontal: 5,
-                      vertical: 2,
+                      horizontal: 6,
+                      vertical: 3,
                     ),
                     decoration: BoxDecoration(
                       color: const Color(0xFF4ADE80),
@@ -317,7 +320,7 @@ class _HomeViewState extends State<HomeView> with TickerProviderStateMixin {
                       'IA',
                       style: GoogleFonts.poppins(
                         color: Colors.white,
-                        fontSize: 8,
+                        fontSize: 9,
                         fontWeight: FontWeight.w800,
                       ),
                     ),
